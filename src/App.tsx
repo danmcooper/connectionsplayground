@@ -93,6 +93,26 @@ function fmtLocalYYYYMMDD(d: Date) {
   return `${y}-${m}-${day}`;
 }
 
+/**
+ * Public “Connections Puzzle #” derived from print_date.
+ * Puzzle #1 = 2023-06-13
+ *
+ * Pure: depends only on printDate input + constants, uses UTC to avoid timezone drift.
+ */
+/**
+ * Public “Connections Puzzle #” derived from NYT print_date (YYYY-MM-DD).
+ * Puzzle #1 = 2023-06-12
+ */
+export function connectionsPuzzleNumber(printDate: string): number {
+  const [y, m, d] = printDate.split("-").map(Number);
+
+  const dateUtc = Date.UTC(y, m - 1, d);
+  const epochUtc = Date.UTC(2023, 5, 12); // June 12, 2023
+  const MS_PER_DAY = 86_400_000;
+
+  return Math.floor((dateUtc - epochUtc) / MS_PER_DAY) + 1;
+}
+
 function nytToTiles(data: NytConnectionsResponse): Tile[] {
   const allCards = data.categories.flatMap((c) => c.cards);
   if (allCards.length !== 16) {
@@ -123,11 +143,10 @@ function pickBestDateFromIndex(
   const avail = index.available ?? {};
   if (avail[preferredDate]?.ok) return preferredDate;
 
-  // Try anchor_print_date next (what your workflow considers “today” in NY)
-  if (index.anchor_print_date && avail[index.anchor_print_date]?.ok)
+  if (index.anchor_print_date && avail[index.anchor_print_date]?.ok) {
     return index.anchor_print_date;
+  }
 
-  // Otherwise pick the nearest "ok" date by absolute day difference
   const okDates = Object.values(avail)
     .filter((v): v is { ok: true; printDate: string } => (v as any).ok)
     .map((v) => v.printDate)
@@ -137,7 +156,7 @@ function pickBestDateFromIndex(
 
   const toDayNum = (s: string) => {
     const [yy, mm, dd] = s.split("-").map(Number);
-    return Math.floor(Date.UTC(yy, mm - 1, dd) / 86400000);
+    return Math.floor(Date.UTC(yy, mm - 1, dd) / 86_400_000);
   };
 
   const target = toDayNum(preferredDate);
@@ -157,7 +176,7 @@ function pickBestDateFromIndex(
 
 export default function App() {
   const [tiles, setTiles] = useState<Tile[]>(fallbackTiles);
-  const [baseTiles, setBaseTiles] = useState<Tile[]>(fallbackTiles); // Reset returns to current loaded puzzle
+  const [baseTiles, setBaseTiles] = useState<Tile[]>(fallbackTiles);
   const [groups, setGroups] = useState<Group[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showColorPicker, setShowColorPicker] = useState(false);
@@ -171,7 +190,6 @@ export default function App() {
     editor?: string;
   } | null>(null);
 
-  // what date we attempted/loaded (local date string)
   const [requestedDate, setRequestedDate] = useState<string | null>(null);
 
   const usedColors = useMemo(
@@ -209,7 +227,6 @@ export default function App() {
     setError(null);
     setRequestedDate(dateStr);
 
-    // 1) Prefer index-driven load (lets us gracefully handle missing dates)
     try {
       const index = await fetchJson<NytIndex>(nytUrl("nyt/index.json"));
       const bestDate = pickBestDateFromIndex(index, dateStr);
@@ -236,10 +253,9 @@ export default function App() {
         return;
       }
     } catch {
-      // If index.json is missing or malformed, fall through to direct-date + latest.json
+      // fall through
     }
 
-    // 2) Try the exact date file (works even without index.json)
     try {
       const data = await fetchJson<NytConnectionsResponse>(
         nytUrl(`nyt/${dateStr}.json`),
@@ -261,10 +277,9 @@ export default function App() {
       setLoading(false);
       return;
     } catch {
-      // ignore, try latest
+      // fall through
     }
 
-    // 3) Last resort: latest.json (if your workflow writes it)
     try {
       const data = await fetchJson<NytConnectionsResponse>(
         nytUrl("nyt/latest.json"),
@@ -373,6 +388,10 @@ export default function App() {
     setShowColorPicker(false);
   };
 
+  const puzzleNumber = nytMeta?.print_date
+    ? connectionsPuzzleNumber(nytMeta.print_date)
+    : null;
+
   return (
     <div className="nytPage">
       <div className="nytFrame">
@@ -399,13 +418,17 @@ export default function App() {
         {(loading || error || nytMeta || requestedDate) && (
           <div className="nytStatus" role="status" aria-live="polite">
             {loading && <div>Loading local puzzle files…</div>}
+
             {!loading && error && <div className="nytError">{error}</div>}
+
             {!loading && !error && (
               <div className="nytMeta">
                 {nytMeta ? (
                   <>
-                    Loaded {nytMeta.print_date} • #{nytMeta.id}
-                    {nytMeta.editor ? ` • Editor: ${nytMeta.editor}` : ""}
+                    {puzzleNumber !== null ? (
+                      <>Puzzle #{puzzleNumber} • </>
+                    ) : null}
+                    {nytMeta.print_date}
                   </>
                 ) : (
                   <>Requested {requestedDate}</>
