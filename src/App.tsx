@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 
 type ColorKey = "yellow" | "green" | "blue" | "purple";
@@ -18,7 +18,7 @@ type Group = {
   tileIds: string[]; // exactly 4
 };
 
-const initialTiles: Tile[] = [
+const fallbackTiles: Tile[] = [
   { id: "t1", text: "STONE" },
   { id: "t2", text: "TEMPLE" },
   { id: "t3", text: "PILOT" },
@@ -37,15 +37,84 @@ const initialTiles: Tile[] = [
   { id: "t16", text: "VALET" },
 ];
 
+type NytConnectionsResponse = {
+  status: "OK" | string;
+  id: number;
+  print_date: string; // YYYY-MM-DD
+  editor?: string;
+  categories: Array<{
+    title: string;
+    cards: Array<{
+      content: string;
+      position: number; // 0..15
+    }>;
+  }>;
+};
+
 function uid(prefix = "g") {
   return `${prefix}_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`;
 }
 
+/** NYT uses a "print_date" aligned to NY time. */
+function fmtYYYYMMDD(date: Date, timeZone = "America/New_York") {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const y = parts.find((p) => p.type === "year")?.value ?? "1970";
+  const m = parts.find((p) => p.type === "month")?.value ?? "01";
+  const d = parts.find((p) => p.type === "day")?.value ?? "01";
+  return `${y}-${m}-${d}`;
+}
+
+async function fetchConnectionsByDate(printDate: string, signal?: AbortSignal) {
+  const url = `https://www.nytimes.com/svc/connections/v2/${printDate}.json`;
+  const res = await fetch(url, { signal });
+  if (!res.ok)
+    throw new Error(`NYT fetch failed: ${res.status} ${res.statusText}`);
+  const data = (await res.json()) as NytConnectionsResponse;
+  if (data.status !== "OK")
+    throw new Error(`NYT status not OK: ${data.status}`);
+  return data;
+}
+
+function nytToTiles(data: NytConnectionsResponse): Tile[] {
+  const allCards = data.categories.flatMap((c) => c.cards);
+  if (allCards.length !== 16) {
+    throw new Error(`Expected 16 cards, got ${allCards.length}`);
+  }
+
+  // Match NYT ordering by "position" (0..15)
+  return allCards
+    .slice()
+    .sort((a, b) => a.position - b.position)
+    .map((card) => ({
+      // stable id tied to puzzle id + position
+      id: `nyt_${data.id}_${card.position}`,
+      text: card.content.toUpperCase(),
+    }));
+}
+
 export default function App() {
-  const [tiles, setTiles] = useState<Tile[]>(initialTiles);
+  const [tiles, setTiles] = useState<Tile[]>(fallbackTiles);
+  const [baseTiles, setBaseTiles] = useState<Tile[]>(fallbackTiles); // used for Reset (to loaded puzzle)
   const [groups, setGroups] = useState<Group[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showColorPicker, setShowColorPicker] = useState(false);
+
+  // NYT fetch status
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [nytMeta, setNytMeta] = useState<{
+    id: number;
+    print_date: string;
+    editor?: string;
+  } | null>(null);
+
+  const hasLoadedOnceRef = useRef(false);
 
   const usedColors = useMemo(
     () => new Set(groups.map((g) => g.color)),
@@ -76,6 +145,46 @@ export default function App() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [showColorPicker]);
+
+  // Load today's NYT puzzle once on mount
+  useEffect(() => {
+    if (hasLoadedOnceRef.current) return;
+    hasLoadedOnceRef.current = true;
+
+    const ac = new AbortController();
+    const printDate = fmtYYYYMMDD(new Date(), "America/New_York");
+
+    (async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const data = await fetchConnectionsByDate(printDate, ac.signal);
+        const nextTiles = nytToTiles(data);
+
+        setNytMeta({
+          id: data.id,
+          print_date: data.print_date,
+          editor: data.editor,
+        });
+        setTiles(nextTiles);
+        setBaseTiles(nextTiles);
+
+        // Reset gameplay state for the loaded puzzle
+        setGroups([]);
+        setSelected(new Set());
+        setShowColorPicker(false);
+      } catch (e: any) {
+        if (e?.name === "AbortError") return;
+        setError(e?.message ?? "Failed to load NYT puzzle");
+        // keep fallback tiles visible
+      } finally {
+        setLoading(false);
+      }
+    })();
+
+    return () => ac.abort();
+  }, []);
 
   const toggleSelect = (tileId: string) => {
     if (groupedTileIds.has(tileId)) return;
@@ -146,7 +255,7 @@ export default function App() {
   };
 
   const resetAll = () => {
-    setTiles(initialTiles);
+    setTiles(baseTiles);
     setGroups([]);
     clearSelection();
     setShowColorPicker(false);
@@ -174,6 +283,19 @@ export default function App() {
         <div className="nytHeadline">
           <div className="nytPrompt">Create four groups of four!</div>
         </div>
+
+        {(loading || error || nytMeta) && (
+          <div className="nytStatus" role="status" aria-live="polite">
+            {loading && <div>Loading today’s NYT puzzle…</div>}
+            {!loading && error && <div className="nytError">{error}</div>}
+            {!loading && !error && nytMeta && (
+              <div className="nytMeta">
+                NYT {nytMeta.print_date} • #{nytMeta.id}
+                {nytMeta.editor ? ` • Editor: ${nytMeta.editor}` : ""}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Categorized rows */}
         <section className="nytRows">
