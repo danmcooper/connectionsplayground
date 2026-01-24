@@ -490,15 +490,6 @@ export default function App() {
             Reset
           </button>
 
-          <button
-            className="linkBtn"
-            type="button"
-            onClick={() => loadPuzzleByDate(fmtLocalYYYYMMDD(new Date()))}
-            title="Reload puzzle for your local date"
-          >
-            Reload Today
-          </button>
-
           <span className="tiny">
             Selected: <b>{selectedCount}</b>/4
           </span>
