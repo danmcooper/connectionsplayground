@@ -72,6 +72,13 @@ function uid(prefix = "g") {
   return `${prefix}_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`;
 }
 
+/** Prefix paths with Vite BASE_URL so it works on GitHub Pages (/connectionsplayground/...). */
+function nytUrl(path: string) {
+  const base = import.meta.env.BASE_URL; // "/" locally, "/connectionsplayground/" on Pages
+  const clean = path.replace(/^\//, "");
+  return `${base}${clean}`;
+}
+
 /** YYYY-MM-DD in *browser local time* */
 function fmtLocalYYYYMMDD(d: Date) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -103,8 +110,9 @@ function nytToTiles(data: NytConnectionsResponse): Tile[] {
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok)
+  if (!res.ok) {
     throw new Error(`Fetch failed: ${res.status} ${res.statusText} (${url})`);
+  }
   return (await res.json()) as T;
 }
 
@@ -203,12 +211,12 @@ export default function App() {
 
     // 1) Prefer index-driven load (lets us gracefully handle missing dates)
     try {
-      const index = await fetchJson<NytIndex>("/nyt/index.json");
+      const index = await fetchJson<NytIndex>(nytUrl("nyt/index.json"));
       const bestDate = pickBestDateFromIndex(index, dateStr);
 
       if (bestDate) {
         const data = await fetchJson<NytConnectionsResponse>(
-          `/nyt/${bestDate}.json`,
+          nytUrl(`nyt/${bestDate}.json`),
         );
         if (data.status !== "OK")
           throw new Error(`Puzzle status not OK: ${data.status}`);
@@ -234,7 +242,7 @@ export default function App() {
     // 2) Try the exact date file (works even without index.json)
     try {
       const data = await fetchJson<NytConnectionsResponse>(
-        `/nyt/${dateStr}.json`,
+        nytUrl(`nyt/${dateStr}.json`),
       );
       if (data.status !== "OK")
         throw new Error(`Puzzle status not OK: ${data.status}`);
@@ -258,7 +266,9 @@ export default function App() {
 
     // 3) Last resort: latest.json (if your workflow writes it)
     try {
-      const data = await fetchJson<NytConnectionsResponse>("/nyt/latest.json");
+      const data = await fetchJson<NytConnectionsResponse>(
+        nytUrl("nyt/latest.json"),
+      );
       if (data.status !== "OK")
         throw new Error(`Puzzle status not OK: ${data.status}`);
 
