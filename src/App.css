@@ -143,7 +143,7 @@ body {
   line-height: 1.35;
 }
 
-/* ---------- NYT fetch status/meta ---------- */
+/* ---------- fetch status/meta ---------- */
 .nytStatus {
   text-align: center;
   margin: 0 0 10px;
@@ -276,19 +276,6 @@ body {
   color: var(--muted);
 }
 
-.dots {
-  display: flex;
-  gap: 6px;
-}
-
-.dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  background: #333;
-  opacity: 0.65;
-}
-
 /* ---------- controls ---------- */
 .nytControls {
   display: flex;
@@ -377,7 +364,6 @@ body {
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
 }
 
-/* smaller sizing */
 .modal.small {
   width: min(320px, 92vw);
   padding: 12px;
@@ -399,7 +385,6 @@ body {
   margin-bottom: 2px;
 }
 
-/* color buttons */
 .colorPill {
   border-radius: 999px;
   padding: 8px 10px;

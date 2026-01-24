@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import "./App.css";
 
 type ColorKey = "yellow" | "green" | "blue" | "purple";
@@ -51,34 +51,39 @@ type NytConnectionsResponse = {
   }>;
 };
 
+type NytIndex = {
+  generated_at?: string;
+  timezone?: string; // likely "America/New_York" from your workflow
+  anchor_print_date: string; // the date the workflow considers "today" in NY
+  range?: { from: number; to: number };
+  available: Record<
+    string,
+    | { ok: true; printDate: string; id?: number; editor?: string }
+    | {
+        ok: false;
+        printDate: string;
+        status?: number | string;
+        statusText?: string;
+      }
+  >;
+};
+
 function uid(prefix = "g") {
   return `${prefix}_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`;
 }
 
-/** NYT uses a "print_date" aligned to NY time. */
-function fmtYYYYMMDD(date: Date, timeZone = "America/New_York") {
+/** YYYY-MM-DD in *browser local time* */
+function fmtLocalYYYYMMDD(d: Date) {
   const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).formatToParts(date);
+  }).formatToParts(d);
 
   const y = parts.find((p) => p.type === "year")?.value ?? "1970";
   const m = parts.find((p) => p.type === "month")?.value ?? "01";
-  const d = parts.find((p) => p.type === "day")?.value ?? "01";
-  return `${y}-${m}-${d}`;
-}
-
-async function fetchConnectionsByDate(printDate: string, signal?: AbortSignal) {
-  const url = `https://www.nytimes.com/svc/connections/v2/${printDate}.json`;
-  const res = await fetch(url, { signal });
-  if (!res.ok)
-    throw new Error(`NYT fetch failed: ${res.status} ${res.statusText}`);
-  const data = (await res.json()) as NytConnectionsResponse;
-  if (data.status !== "OK")
-    throw new Error(`NYT status not OK: ${data.status}`);
-  return data;
+  const day = parts.find((p) => p.type === "day")?.value ?? "01";
+  return `${y}-${m}-${day}`;
 }
 
 function nytToTiles(data: NytConnectionsResponse): Tile[] {
@@ -87,25 +92,69 @@ function nytToTiles(data: NytConnectionsResponse): Tile[] {
     throw new Error(`Expected 16 cards, got ${allCards.length}`);
   }
 
-  // Match NYT ordering by "position" (0..15)
   return allCards
     .slice()
     .sort((a, b) => a.position - b.position)
     .map((card) => ({
-      // stable id tied to puzzle id + position
       id: `nyt_${data.id}_${card.position}`,
       text: card.content.toUpperCase(),
     }));
 }
 
+async function fetchJson<T>(url: string): Promise<T> {
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok)
+    throw new Error(`Fetch failed: ${res.status} ${res.statusText} (${url})`);
+  return (await res.json()) as T;
+}
+
+function pickBestDateFromIndex(
+  index: NytIndex,
+  preferredDate: string,
+): string | null {
+  const avail = index.available ?? {};
+  if (avail[preferredDate]?.ok) return preferredDate;
+
+  // Try anchor_print_date next (what your workflow considers “today” in NY)
+  if (index.anchor_print_date && avail[index.anchor_print_date]?.ok)
+    return index.anchor_print_date;
+
+  // Otherwise pick the nearest "ok" date by absolute day difference
+  const okDates = Object.values(avail)
+    .filter((v): v is { ok: true; printDate: string } => (v as any).ok)
+    .map((v) => v.printDate)
+    .sort();
+
+  if (okDates.length === 0) return null;
+
+  const toDayNum = (s: string) => {
+    const [yy, mm, dd] = s.split("-").map(Number);
+    return Math.floor(Date.UTC(yy, mm - 1, dd) / 86400000);
+  };
+
+  const target = toDayNum(preferredDate);
+  let best = okDates[0];
+  let bestDist = Math.abs(toDayNum(best) - target);
+
+  for (const d of okDates) {
+    const dist = Math.abs(toDayNum(d) - target);
+    if (dist < bestDist) {
+      best = d;
+      bestDist = dist;
+    }
+  }
+
+  return best;
+}
+
 export default function App() {
   const [tiles, setTiles] = useState<Tile[]>(fallbackTiles);
-  const [baseTiles, setBaseTiles] = useState<Tile[]>(fallbackTiles); // used for Reset (to loaded puzzle)
+  const [baseTiles, setBaseTiles] = useState<Tile[]>(fallbackTiles); // Reset returns to current loaded puzzle
   const [groups, setGroups] = useState<Group[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showColorPicker, setShowColorPicker] = useState(false);
 
-  // NYT fetch status
+  // puzzle load status
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nytMeta, setNytMeta] = useState<{
@@ -114,7 +163,8 @@ export default function App() {
     editor?: string;
   } | null>(null);
 
-  const hasLoadedOnceRef = useRef(false);
+  // what date we attempted/loaded (local date string)
+  const [requestedDate, setRequestedDate] = useState<string | null>(null);
 
   const usedColors = useMemo(
     () => new Set(groups.map((g) => g.color)),
@@ -146,22 +196,24 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [showColorPicker]);
 
-  // Load today's NYT puzzle once on mount
-  useEffect(() => {
-    if (hasLoadedOnceRef.current) return;
-    hasLoadedOnceRef.current = true;
+  async function loadPuzzleByDate(dateStr: string) {
+    setLoading(true);
+    setError(null);
+    setRequestedDate(dateStr);
 
-    const ac = new AbortController();
-    const printDate = fmtYYYYMMDD(new Date(), "America/New_York");
+    // 1) Prefer index-driven load (lets us gracefully handle missing dates)
+    try {
+      const index = await fetchJson<NytIndex>("/nyt/index.json");
+      const bestDate = pickBestDateFromIndex(index, dateStr);
 
-    (async () => {
-      try {
-        setLoading(true);
-        setError(null);
+      if (bestDate) {
+        const data = await fetchJson<NytConnectionsResponse>(
+          `/nyt/${bestDate}.json`,
+        );
+        if (data.status !== "OK")
+          throw new Error(`Puzzle status not OK: ${data.status}`);
 
-        const data = await fetchConnectionsByDate(printDate, ac.signal);
         const nextTiles = nytToTiles(data);
-
         setNytMeta({
           id: data.id,
           print_date: data.print_date,
@@ -169,21 +221,71 @@ export default function App() {
         });
         setTiles(nextTiles);
         setBaseTiles(nextTiles);
-
-        // Reset gameplay state for the loaded puzzle
         setGroups([]);
         setSelected(new Set());
         setShowColorPicker(false);
-      } catch (e: any) {
-        if (e?.name === "AbortError") return;
-        setError(e?.message ?? "Failed to load NYT puzzle");
-        // keep fallback tiles visible
-      } finally {
         setLoading(false);
+        return;
       }
-    })();
+    } catch {
+      // If index.json is missing or malformed, fall through to direct-date + latest.json
+    }
 
-    return () => ac.abort();
+    // 2) Try the exact date file (works even without index.json)
+    try {
+      const data = await fetchJson<NytConnectionsResponse>(
+        `/nyt/${dateStr}.json`,
+      );
+      if (data.status !== "OK")
+        throw new Error(`Puzzle status not OK: ${data.status}`);
+
+      const nextTiles = nytToTiles(data);
+      setNytMeta({
+        id: data.id,
+        print_date: data.print_date,
+        editor: data.editor,
+      });
+      setTiles(nextTiles);
+      setBaseTiles(nextTiles);
+      setGroups([]);
+      setSelected(new Set());
+      setShowColorPicker(false);
+      setLoading(false);
+      return;
+    } catch {
+      // ignore, try latest
+    }
+
+    // 3) Last resort: latest.json (if your workflow writes it)
+    try {
+      const data = await fetchJson<NytConnectionsResponse>("/nyt/latest.json");
+      if (data.status !== "OK")
+        throw new Error(`Puzzle status not OK: ${data.status}`);
+
+      const nextTiles = nytToTiles(data);
+      setNytMeta({
+        id: data.id,
+        print_date: data.print_date,
+        editor: data.editor,
+      });
+      setTiles(nextTiles);
+      setBaseTiles(nextTiles);
+      setGroups([]);
+      setSelected(new Set());
+      setShowColorPicker(false);
+      setLoading(false);
+      return;
+    } catch (e: any) {
+      setError(e?.message ?? "Failed to load local NYT puzzle files");
+      setLoading(false);
+    }
+  }
+
+  // Load puzzle for *local* day on mount
+  useEffect(() => {
+    const localDate = fmtLocalYYYYMMDD(new Date());
+    loadPuzzleByDate(localDate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const toggleSelect = (tileId: string) => {
@@ -284,14 +386,20 @@ export default function App() {
           <div className="nytPrompt">Create four groups of four!</div>
         </div>
 
-        {(loading || error || nytMeta) && (
+        {(loading || error || nytMeta || requestedDate) && (
           <div className="nytStatus" role="status" aria-live="polite">
-            {loading && <div>Loading today’s NYT puzzle…</div>}
+            {loading && <div>Loading local puzzle files…</div>}
             {!loading && error && <div className="nytError">{error}</div>}
-            {!loading && !error && nytMeta && (
+            {!loading && !error && (
               <div className="nytMeta">
-                NYT {nytMeta.print_date} • #{nytMeta.id}
-                {nytMeta.editor ? ` • Editor: ${nytMeta.editor}` : ""}
+                {nytMeta ? (
+                  <>
+                    Loaded {nytMeta.print_date} • #{nytMeta.id}
+                    {nytMeta.editor ? ` • Editor: ${nytMeta.editor}` : ""}
+                  </>
+                ) : (
+                  <>Requested {requestedDate}</>
+                )}
               </div>
             )}
           </div>
@@ -371,6 +479,16 @@ export default function App() {
           <button className="linkBtn" onClick={resetAll} type="button">
             Reset
           </button>
+
+          <button
+            className="linkBtn"
+            type="button"
+            onClick={() => loadPuzzleByDate(fmtLocalYYYYMMDD(new Date()))}
+            title="Reload puzzle for your local date"
+          >
+            Reload Today
+          </button>
+
           <span className="tiny">
             Selected: <b>{selectedCount}</b>/4
           </span>
