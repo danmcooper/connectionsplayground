@@ -213,15 +213,13 @@ export default function App() {
             Reset
           </button>
 
-          {/* ✅ REPLACED HERE */}
-          <a
+          {/* ⬅️ THIS IS WHAT WE REMOVED LATER */}
+          <button
             className="linkBtn"
-            href="https://www.nytimes.com/games/connections"
-            target="_blank"
-            rel="noopener noreferrer"
+            onClick={() => loadPuzzleByDate?.(fmtLocalYYYYMMDD(new Date()))}
           >
-            Go to NYT Connections
-          </a>
+            Reload Today
+          </button>
 
           <span className="tiny">
             Selected: <b>{selected.size}</b>/4
