@@ -1,0 +1,49 @@
+# =========================
+# Node / Vite
+# =========================
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# =========================
+# Logs
+# =========================
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# =========================
+# Environment variables
+# =========================
+.env
+.env.*
+!.env.example
+
+# =========================
+# OS files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Editors / IDEs
+# =========================
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.swp
+
+# =========================
+# Coverage / Testing
+# =========================
+coverage/
+*.lcov
+
+# =========================
+# Misc
+# =========================
+*.tgz
+*.log
+.cache/

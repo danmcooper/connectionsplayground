@@ -1,0 +1,413 @@
+/* =========================
+   Connections – NYT tokens (exact)
+   Centered layout + smaller modal
+   ========================= */
+
+:root {
+  --connections-lightest-beige: #efefe6;
+  --connections-light-beige: #cfcfbf;
+  --connections-beige: #a39f95;
+  --connections-dark-beige: #5a594ebf; /* alpha */
+  --connections-darker-beige: #787668;
+  --connections-extra-dark-beige: #656458;
+  --connections-darkest-beige: #5a594e;
+
+  --connections-yellow: #f9df6d;
+  --connections-maroon: #ba81c5;
+  --connections-blue: #b0c4ef;
+  --connections-green: #a0c35a;
+  --connections-dark-purple: #861cab;
+
+  --nyt-blue-ring: #2d6cdf;
+  --text: #121212;
+  --muted: #6b6b6b;
+
+  --tile-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
+
+  --solved-tile-border: rgba(0, 0, 0, 0.38);
+
+  /* one shared centered column width */
+  --col: 380px;
+}
+
+/* ---- HARD RESET FOR VITE TEMPLATE LAYOUT ---- */
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+}
+
+#root {
+  padding: 0 !important;
+  max-width: none !important;
+  display: flex;
+  justify-content: center;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #fff;
+  color: var(--text);
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    Helvetica,
+    Arial;
+}
+
+/* ---------- layout ---------- */
+.nytPage {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  padding: 18px 10px 28px;
+}
+
+.nytFrame {
+  width: var(--col);
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+/* Ensure all direct sections align centered */
+.nytTopbar,
+.nytHeadline,
+.nytRows,
+.nytGridWrap,
+.nytMistakes,
+.nytControls,
+.nytBottomBar {
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ---------- top bar ---------- */
+.nytTopbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 2px 12px;
+}
+
+.nytBrand {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+}
+
+.nytTitle {
+  font-weight: 900;
+  font-size: 18px;
+  letter-spacing: 0.02em;
+  text-align: center;
+}
+
+.nytTopbarRight {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.iconBtn {
+  border: 0;
+  background: transparent;
+  font-size: 18px;
+  padding: 8px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.iconBtn:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+/* ---------- headline ---------- */
+.nytHeadline {
+  text-align: center;
+  padding: 4px 0 14px;
+}
+
+.nytPrompt {
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+/* ---------- solved rows ---------- */
+.nytRows {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.nytSolvedRow {
+  border-radius: 8px;
+  padding: 10px;
+  border: 0;
+  color: var(--text);
+}
+
+.nytSolvedRow.yellow {
+  background: var(--connections-yellow);
+}
+.nytSolvedRow.purple {
+  background: var(--connections-maroon);
+}
+.nytSolvedRow.green {
+  background: var(--connections-green);
+}
+.nytSolvedRow.blue {
+  background: var(--connections-blue);
+}
+
+/* ---------- grid ---------- */
+.nytGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+}
+
+/* ---------- tiles ---------- */
+.nytTile {
+  width: 100%;
+  min-width: 0;
+  height: 60px;
+
+  border-radius: 6px;
+  background: var(--connections-lightest-beige);
+  border: 1px solid var(--connections-light-beige);
+  box-shadow: var(--tile-shadow);
+
+  color: var(--text);
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+
+  cursor: pointer;
+  padding: 6px;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.nytTile:hover {
+  filter: brightness(0.99);
+}
+
+/* selected */
+.nytTile.selected {
+  background: var(--connections-darkest-beige);
+  color: #fff;
+  border-color: var(--connections-extra-dark-beige);
+  outline: 2px solid var(--nyt-blue-ring);
+  outline-offset: 0;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.18);
+}
+
+.nytTile:focus-visible {
+  outline: 2px solid var(--nyt-blue-ring);
+  outline-offset: 2px;
+}
+
+/* Solved tiles: flat fill + darker borders */
+.nytTile.yellow,
+.nytTile.purple,
+.nytTile.green,
+.nytTile.blue {
+  box-shadow: none;
+  border: 1px solid var(--solved-tile-border);
+  color: var(--text);
+}
+
+.nytTile.yellow {
+  background: var(--connections-yellow);
+}
+.nytTile.purple {
+  background: var(--connections-maroon);
+}
+.nytTile.green {
+  background: var(--connections-green);
+}
+.nytTile.blue {
+  background: var(--connections-blue);
+}
+
+/* ---------- mistakes row ---------- */
+.nytMistakes {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 0 18px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.dots {
+  display: flex;
+  gap: 6px;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #333;
+  opacity: 0.65;
+}
+
+/* ---------- controls ---------- */
+.nytControls {
+  display: flex;
+  gap: 10px;
+}
+
+.pillBtn {
+  flex: 1;
+  border-radius: 999px;
+  padding: 10px 14px;
+  font-weight: 700;
+  font-size: 14px;
+
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  background: #fff;
+  color: var(--text);
+
+  cursor: pointer;
+}
+
+.pillBtn:hover {
+  filter: brightness(1.02);
+}
+
+.pillBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.pillBtn.primary {
+  background: #111;
+  color: #fff;
+  border-color: #111;
+}
+
+.pillBtn.subtle {
+  background: transparent;
+  border-color: rgba(0, 0, 0, 0.18);
+}
+
+.pillBtn.full {
+  width: 100%;
+  margin-top: 10px;
+}
+
+/* ---------- bottom bar ---------- */
+.nytBottomBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 2px 0;
+}
+
+.linkBtn {
+  border: 0;
+  background: transparent;
+  color: rgba(0, 0, 0, 0.55);
+  font-weight: 700;
+  cursor: pointer;
+  padding: 6px 0;
+}
+
+.linkBtn:hover {
+  text-decoration: underline;
+}
+
+.tiny {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+/* ---------- centered modal (smaller) ---------- */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+
+.modal {
+  background: #fff;
+  border-radius: 14px;
+  padding: 14px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+}
+
+/* smaller sizing */
+.modal.small {
+  width: min(320px, 92vw);
+  padding: 12px;
+  border-radius: 12px;
+}
+
+.modalTitle {
+  font-weight: 900;
+  font-size: 14px;
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.modalRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-bottom: 2px;
+}
+
+/* color buttons */
+.colorPill {
+  border-radius: 999px;
+  padding: 8px 10px;
+  font-weight: 900;
+  font-size: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  background: #fff;
+  cursor: pointer;
+}
+
+.colorPill:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: grayscale(0.15);
+}
+
+.colorPill.yellow {
+  background: var(--connections-yellow);
+}
+.colorPill.purple {
+  background: var(--connections-maroon);
+}
+.colorPill.green {
+  background: var(--connections-green);
+}
+.colorPill.blue {
+  background: var(--connections-blue);
+}
