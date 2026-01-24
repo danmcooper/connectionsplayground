@@ -94,12 +94,6 @@ function fmtLocalYYYYMMDD(d: Date) {
 }
 
 /**
- * Public “Connections Puzzle #” derived from print_date.
- * Puzzle #1 = 2023-06-13
- *
- * Pure: depends only on printDate input + constants, uses UTC to avoid timezone drift.
- */
-/**
  * Public “Connections Puzzle #” derived from NYT print_date (YYYY-MM-DD).
  * Puzzle #1 = 2023-06-12
  */
@@ -369,6 +363,26 @@ export default function App() {
     clearSelection();
   };
 
+  /**
+   * ✅ Ordering fix:
+   * When ungrouping, move the group's tiles to the front of `tiles[]` so they
+   * don't snap back to their old positions.
+   */
+  const bringTileIdsToFront = (tileIds: string[]) => {
+    setTiles((prev) => {
+      const frontSet = new Set(tileIds);
+      const byId = new Map(prev.map((t) => [t.id, t] as const));
+
+      const front: Tile[] = tileIds
+        .map((id) => byId.get(id))
+        .filter((t): t is Tile => Boolean(t));
+
+      const rest = prev.filter((t) => !frontSet.has(t.id));
+
+      return [...front, ...rest];
+    });
+  };
+
   // Click a grouped tile => group dissolves; other 3 remain selected (gray) in grid.
   const onClickGroupedTile = (clickedTileId: string) => {
     const g = groups.find((gr) => gr.tileIds.includes(clickedTileId));
@@ -376,9 +390,15 @@ export default function App() {
 
     const otherThree = g.tileIds.filter((id) => id !== clickedTileId);
 
+    // remove group
     setGroups((prev) => prev.filter((gr) => gr.id !== g.id));
+
+    // keep other three selected
     setSelected(new Set(otherThree));
     setShowColorPicker(false);
+
+    // ✅ keep visual continuity by preventing "snap back"
+    bringTileIdsToFront(g.tileIds);
   };
 
   const resetAll = () => {
