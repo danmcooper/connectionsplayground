@@ -168,6 +168,59 @@ function pickBestDateFromIndex(
   return best;
 }
 
+/* ---------------- localStorage: save only categorized groups + color ---------------- */
+
+function storageKeyForPrintDate(printDate: string) {
+  return `connections-playground::${printDate}`;
+}
+
+function loadSavedGroups(
+  printDate: string,
+  validTileIds: Set<string>,
+): Group[] {
+  try {
+    const raw = localStorage.getItem(storageKeyForPrintDate(printDate));
+    if (!raw) return [];
+
+    const parsed = JSON.parse(raw) as {
+      groups?: Array<Pick<Group, "id" | "color" | "tileIds">>;
+    };
+    const groups = Array.isArray(parsed.groups) ? parsed.groups : [];
+
+    // Filter out anything invalid (wrong lengths or tile ids not in this puzzle)
+    const cleaned: Group[] = [];
+    for (const g of groups) {
+      if (!g || !Array.isArray(g.tileIds) || g.tileIds.length !== 4) continue;
+      if (!g.color) continue;
+      if (
+        g.tileIds.some((id) => typeof id !== "string" || !validTileIds.has(id))
+      )
+        continue;
+
+      cleaned.push({
+        id: typeof g.id === "string" ? g.id : uid("group"),
+        color: g.color as ColorKey,
+        tileIds: g.tileIds,
+      });
+    }
+
+    return cleaned;
+  } catch {
+    return [];
+  }
+}
+
+function saveGroups(printDate: string, groups: Group[]) {
+  try {
+    localStorage.setItem(
+      storageKeyForPrintDate(printDate),
+      JSON.stringify({ groups }),
+    );
+  } catch {
+    // ignore storage errors (private mode, quota, etc.)
+  }
+}
+
 export default function App() {
   const [tiles, setTiles] = useState<Tile[]>(fallbackTiles);
   const [baseTiles, setBaseTiles] = useState<Tile[]>(fallbackTiles);
@@ -221,6 +274,27 @@ export default function App() {
     setError(null);
     setRequestedDate(dateStr);
 
+    const applyLoadedPuzzle = (data: NytConnectionsResponse) => {
+      const nextTiles = nytToTiles(data);
+      const tileIdSet = new Set(nextTiles.map((t) => t.id));
+
+      setNytMeta({
+        id: data.id,
+        print_date: data.print_date,
+        editor: data.editor,
+      });
+      setTiles(nextTiles);
+      setBaseTiles(nextTiles);
+
+      // restore saved groups for this print_date (only categorized things + color)
+      const saved = loadSavedGroups(data.print_date, tileIdSet);
+      setGroups(saved);
+
+      setSelected(new Set());
+      setShowColorPicker(false);
+      setLoading(false);
+    };
+
     try {
       const index = await fetchJson<NytIndex>(nytUrl("nyt/index.json"));
       const bestDate = pickBestDateFromIndex(index, dateStr);
@@ -232,18 +306,7 @@ export default function App() {
         if (data.status !== "OK")
           throw new Error(`Puzzle status not OK: ${data.status}`);
 
-        const nextTiles = nytToTiles(data);
-        setNytMeta({
-          id: data.id,
-          print_date: data.print_date,
-          editor: data.editor,
-        });
-        setTiles(nextTiles);
-        setBaseTiles(nextTiles);
-        setGroups([]);
-        setSelected(new Set());
-        setShowColorPicker(false);
-        setLoading(false);
+        applyLoadedPuzzle(data);
         return;
       }
     } catch {
@@ -257,18 +320,7 @@ export default function App() {
       if (data.status !== "OK")
         throw new Error(`Puzzle status not OK: ${data.status}`);
 
-      const nextTiles = nytToTiles(data);
-      setNytMeta({
-        id: data.id,
-        print_date: data.print_date,
-        editor: data.editor,
-      });
-      setTiles(nextTiles);
-      setBaseTiles(nextTiles);
-      setGroups([]);
-      setSelected(new Set());
-      setShowColorPicker(false);
-      setLoading(false);
+      applyLoadedPuzzle(data);
       return;
     } catch {
       // fall through
@@ -281,18 +333,7 @@ export default function App() {
       if (data.status !== "OK")
         throw new Error(`Puzzle status not OK: ${data.status}`);
 
-      const nextTiles = nytToTiles(data);
-      setNytMeta({
-        id: data.id,
-        print_date: data.print_date,
-        editor: data.editor,
-      });
-      setTiles(nextTiles);
-      setBaseTiles(nextTiles);
-      setGroups([]);
-      setSelected(new Set());
-      setShowColorPicker(false);
-      setLoading(false);
+      applyLoadedPuzzle(data);
       return;
     } catch (e: any) {
       setError(e?.message ?? "Failed to load local NYT puzzle files");
@@ -306,6 +347,13 @@ export default function App() {
     loadPuzzleByDate(localDate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Persist groups whenever they change (keyed by the puzzle print_date)
+  const storagePrintDate = nytMeta?.print_date ?? null;
+  useEffect(() => {
+    if (!storagePrintDate) return;
+    saveGroups(storagePrintDate, groups);
+  }, [groups, storagePrintDate]);
 
   const toggleSelect = (tileId: string) => {
     if (groupedTileIds.has(tileId)) return;
