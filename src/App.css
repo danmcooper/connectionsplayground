@@ -227,6 +227,12 @@ body {
   filter: brightness(0.99);
 }
 
+/* Smaller font for long words (NYT-style) */
+.nytTile.smallText {
+  font-size: 10px;
+  letter-spacing: 0.03em;
+}
+
 /* selected */
 .nytTile.selected {
   background: var(--connections-darkest-beige);
