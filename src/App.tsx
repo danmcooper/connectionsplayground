@@ -447,6 +447,10 @@ export default function App() {
                   const t = tiles.find((x) => x.id === id);
                   return (
                     <button
+                      key={id}
+                      onClick={() => onClickGroupedTile(id)}
+                      title="Click to uncategorize (keeps other 3 selected)"
+                      type="button"
                       className={`nytTile locked ${g.color} ${
                         t?.text && t.text.length > 7 ? "smallText" : ""
                       }`}
@@ -467,6 +471,10 @@ export default function App() {
               const isSelected = selected.has(t.id);
               return (
                 <button
+                  key={t.id}
+                  onClick={() => toggleSelect(t.id)}
+                  aria-pressed={isSelected}
+                  type="button"
                   className={`nytTile ${isSelected ? "selected" : ""} ${
                     t.text.length > 7 ? "smallText" : ""
                   }`}
