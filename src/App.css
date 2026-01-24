@@ -1,6 +1,7 @@
 /* =========================
    Connections – NYT tokens (exact)
    Centered layout + smaller modal
+   Updated: board ~15% wider + square tiles
    ========================= */
 
 :root {
@@ -26,8 +27,8 @@
 
   --solved-tile-border: rgba(0, 0, 0, 0.38);
 
-  /* one shared centered column width */
-  --col: 380px;
+  /* one shared centered column width (was 380px) */
+  --col: 440px; /* ~15% wider */
 }
 
 /* ---- HARD RESET FOR VITE TEMPLATE LAYOUT ---- */
@@ -199,7 +200,9 @@ body {
 .nytTile {
   width: 100%;
   min-width: 0;
-  height: 60px;
+
+  /* square tiles */
+  aspect-ratio: 1 / 1;
 
   border-radius: 6px;
   background: var(--connections-lightest-beige);
@@ -227,9 +230,9 @@ body {
   filter: brightness(0.99);
 }
 
-/* Smaller font for long words (NYT-style) */
+/* Smaller font for long words (8+ chars) */
 .nytTile.smallText {
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.03em;
 }
 
@@ -342,6 +345,7 @@ body {
   font-weight: 700;
   cursor: pointer;
   padding: 6px 0;
+  text-decoration: none; /* so <a class="linkBtn"> matches <button> */
 }
 
 .linkBtn:hover {
