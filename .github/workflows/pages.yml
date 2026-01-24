@@ -1,0 +1,45 @@
+name: Update NYT data + Deploy Pages
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "10 5 * * *" # 00:10 ET
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm ci
+
+      # 1) fetch public/nyt/*.json (your script)
+      - run: npm run fetch:nyt
+
+      # 2) commit fetched json back to master (so repo keeps the archive)
+      - name: Commit NYT files (if changed)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/nyt/*.json public/nyt/index.json public/nyt/latest.json
+          git commit -m "Update NYT Connections data" || echo "No changes"
+          git push || echo "No push needed"
+
+      # 3) build (copies public/nyt into dist/nyt)
+      - run: npm run build
+
+      # 4) publish dist to gh-pages
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
