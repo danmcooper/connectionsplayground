@@ -148,6 +148,28 @@ async function main() {
   }
 
   console.log("Done. Anchor:", anchorNy, `Range: ${FROM}..${TO}`);
+
+  // -------------------------------
+  // Write available-dates.json
+  // (dates that actually exist / are OK)
+  // -------------------------------
+
+  const availableDates = Object.entries(index.available)
+    .filter(([, v]) => v && v.ok)
+    .map(([date]) => date)
+    .sort();
+
+  const availableDatesJson = {
+    generated_at: index.generated_at,
+    timezone: TZ,
+    anchor_print_date: index.anchor_print_date,
+    dates: availableDates,
+  };
+
+  fs.writeFileSync(
+    path.join(OUT_DIR, "available-dates.json"),
+    JSON.stringify(availableDatesJson),
+  );
 }
 
 main().catch((err) => {
