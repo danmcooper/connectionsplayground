@@ -94,6 +94,32 @@ function resultFromExistingFile(printDate) {
   };
 }
 
+function listAvailableDatesFromDisk() {
+  const files = fs.readdirSync(OUT_DIR);
+
+  const dates = [];
+
+  for (const file of files) {
+    if (!/^\d{4}-\d{2}-\d{2}\.json$/.test(file)) continue;
+
+    const printDate = file.replace(".json", "");
+    const filePath = path.join(OUT_DIR, file);
+
+    try {
+      const raw = fs.readFileSync(filePath, "utf-8");
+      const data = JSON.parse(raw);
+
+      if (data?.status === "OK" && data?.print_date === printDate) {
+        dates.push(printDate);
+      }
+    } catch {
+      // ignore unreadable/bad files
+    }
+  }
+
+  return dates.sort();
+}
+
 async function main() {
   fs.mkdirSync(OUT_DIR, { recursive: true });
 
@@ -154,15 +180,11 @@ async function main() {
   // (dates that actually exist / are OK)
   // -------------------------------
 
-  const availableDates = Object.entries(index.available)
-    .filter(([, v]) => v && v.ok)
-    .map(([date]) => date)
-    .sort();
+  const availableDates = listAvailableDatesFromDisk();
 
   const availableDatesJson = {
-    generated_at: index.generated_at,
+    generated_at: new Date().toISOString(),
     timezone: TZ,
-    anchor_print_date: index.anchor_print_date,
     dates: availableDates,
   };
 
