@@ -1,7 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 
-function fmtYYYYMMDD(date, timeZone = "America/New_York") {
+const TZ = "America/New_York";
+const OUT_DIR = path.join(process.cwd(), "public", "nyt");
+
+function fmtYYYYMMDD(date, timeZone = TZ) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone,
     year: "numeric",
@@ -15,33 +18,35 @@ function fmtYYYYMMDD(date, timeZone = "America/New_York") {
   return `${y}-${m}-${d}`;
 }
 
-function addDays(date, days) {
-  const d = new Date(date);
+function addDaysUtc(utcDate, days) {
+  const d = new Date(utcDate);
   d.setUTCDate(d.getUTCDate() + days);
   return d;
 }
 
-// We want “print_date” aligned to NY’s calendar day.
-// We compute “today” in NY, then generate -2..+2.
-const TZ = "America/New_York";
-const todayNyStr = fmtYYYYMMDD(new Date(), TZ);
+function parseYYYYMMDDToUtcMidnight(s) {
+  const [yy, mm, dd] = s.split("-").map(Number);
+  return new Date(Date.UTC(yy, mm - 1, dd));
+}
 
-// Convert YYYY-MM-DD to a Date anchored at UTC midnight (stable for +/- math)
-const [yy, mm, dd] = todayNyStr.split("-").map(Number);
-const todayUtc = new Date(Date.UTC(yy, mm - 1, dd));
-
-const offsets = [-2, -1, 0, 1, 2];
-const outDir = path.join(process.cwd(), "public", "nyt");
-fs.mkdirSync(outDir, { recursive: true });
+function safeReadJson(filePath) {
+  try {
+    const raw = fs.readFileSync(filePath, "utf-8");
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
 
 async function fetchOne(printDate) {
   const url = `https://www.nytimes.com/svc/connections/v2/${printDate}.json`;
+
   const res = await fetch(url, {
     headers: { "User-Agent": "connections-playground (personal use)" },
   });
 
   if (!res.ok) {
-    // Don’t hard-fail the whole run (future dates may legitimately 404).
+    // Don’t fail the whole run; future dates may 404 until published.
     return {
       ok: false,
       printDate,
@@ -60,41 +65,92 @@ async function fetchOne(printDate) {
     };
   }
 
-  const filePath = path.join(outDir, `${printDate}.json`);
+  const filePath = path.join(OUT_DIR, `${printDate}.json`);
   fs.writeFileSync(filePath, JSON.stringify(data));
   return { ok: true, printDate, id: data.id, editor: data.editor };
 }
 
-const index = {
-  generated_at: new Date().toISOString(),
-  timezone: TZ,
-  anchor_print_date: todayNyStr,
-  range: { from: -2, to: 2 },
-  available: {}, // date -> { ok, id?, editor? } or { ok:false, status... }
-};
+function resultFromExistingFile(printDate) {
+  const filePath = path.join(OUT_DIR, `${printDate}.json`);
+  if (!fs.existsSync(filePath)) return null;
 
-for (const off of offsets) {
-  const d = addDays(todayUtc, off);
-  const printDate = fmtYYYYMMDD(d, "UTC"); // date already anchored; UTC is fine
-  const result = await fetchOne(printDate);
-  index.available[printDate] = result;
-  console.log(
-    result.ok
-      ? `OK  ${printDate}`
-      : `SKIP ${printDate} (${result.status} ${result.statusText})`,
-  );
+  const data = safeReadJson(filePath);
+  if (!data || data.status !== "OK") {
+    // file exists but unreadable or not OK; treat as missing so we can refetch next time if desired
+    return {
+      ok: false,
+      printDate,
+      status: "BAD_FILE",
+      statusText: "Invalid JSON or status not OK",
+    };
+  }
+
+  return {
+    ok: true,
+    printDate,
+    id: data.id,
+    editor: data.editor,
+    fromDisk: true,
+  };
 }
 
-// Write index.json for the React app
-fs.writeFileSync(path.join(outDir, "index.json"), JSON.stringify(index));
+async function main() {
+  fs.mkdirSync(OUT_DIR, { recursive: true });
 
-// Also keep latest.json pointing at “today” if available
-if (index.available[todayNyStr]?.ok) {
-  const latest = fs.readFileSync(
-    path.join(outDir, `${todayNyStr}.json`),
-    "utf-8",
-  );
-  fs.writeFileSync(path.join(outDir, "latest.json"), latest);
+  // Determine “today” in NY time, then use that as the anchor for the range.
+  const anchorNy = fmtYYYYMMDD(new Date(), TZ);
+  const anchorUtc = parseYYYYMMDDToUtcMidnight(anchorNy);
+
+  const FROM = -2;
+  const TO = 30; // ✅ up to 30 days ahead
+
+  const index = {
+    generated_at: new Date().toISOString(),
+    timezone: TZ,
+    anchor_print_date: anchorNy,
+    range: { from: FROM, to: TO },
+    available: {}, // date -> result
+  };
+
+  for (let off = FROM; off <= TO; off++) {
+    const d = addDaysUtc(anchorUtc, off);
+    const printDate = fmtYYYYMMDD(d, "UTC"); // already anchored; UTC format is stable
+
+    // ✅ Skip network if file already exists
+    const existing = resultFromExistingFile(printDate);
+    if (existing?.ok) {
+      index.available[printDate] = existing;
+      console.log(`SKIP ${printDate} (exists)`);
+      continue;
+    }
+
+    // If the file exists but is bad, you can choose to refetch.
+    // We'll refetch in that case.
+    const result = await fetchOne(printDate);
+    index.available[printDate] = result;
+    console.log(
+      result.ok
+        ? `OK   ${printDate}`
+        : `MISS ${printDate} (${result.status} ${result.statusText})`,
+    );
+  }
+
+  // Write index.json
+  fs.writeFileSync(path.join(OUT_DIR, "index.json"), JSON.stringify(index));
+
+  // Write latest.json as anchor day if present (either disk or fetched)
+  const anchorFile = path.join(OUT_DIR, `${anchorNy}.json`);
+  if (fs.existsSync(anchorFile)) {
+    fs.writeFileSync(
+      path.join(OUT_DIR, "latest.json"),
+      fs.readFileSync(anchorFile),
+    );
+  }
+
+  console.log("Done. Anchor:", anchorNy, `Range: ${FROM}..${TO}`);
 }
 
-console.log("Done. Anchor:", todayNyStr);
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
