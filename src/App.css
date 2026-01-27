@@ -179,6 +179,7 @@ body {
   background: transparent;
   color: rgba(0, 0, 0, 0.7);
   cursor: pointer;
+  width: 160px;
 }
 
 .nytTodayBtn:hover {
