@@ -599,3 +599,9 @@ body {
 .colorPill.blue {
   background: var(--connections-blue);
 }
+
+@media (max-width: 420px) {
+  :root {
+    --col: 340px;
+  }
+}
