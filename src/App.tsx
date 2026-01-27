@@ -903,10 +903,10 @@ export default function App() {
           />
         </div>
 
-        {/* Categorized rows */}
-        <section className="nytRows">
+        {/* Categorized rows (NO colored enclosing row; only colored tiles) */}
+        <section className={`nytRows ${groups.length === 4 ? "full" : ""}`}>
           {groups.map((g) => (
-            <div key={g.id} className={`nytSolvedRow ${g.color}`}>
+            <div key={g.id} className="nytSolvedRow">
               <div className="nytGrid">
                 {g.tileIds.map((id) => {
                   const t = tiles.find((x) => x.id === id);
@@ -977,20 +977,6 @@ export default function App() {
           >
             Categorize
           </button>
-
-          {/* <button
-            className="pillBtn danger"
-            onClick={onSolveClick}
-            disabled={!solveEnabled}
-            type="button"
-            title={
-              solveEnabled
-                ? "Reveal the real groups"
-                : "Available for puzzles at least 2 days old"
-            }
-          >
-            Solve
-          </button> */}
         </section>
 
         <div className="nytBottomBar">
