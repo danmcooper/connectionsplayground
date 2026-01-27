@@ -37,6 +37,8 @@ const fallbackTiles: Tile[] = [
   { id: "t16", text: "VALET" },
 ];
 
+const smallTextThreshold = 8; // characters
+
 type NytConnectionsResponse = {
   status: "OK" | string;
   id: number;
@@ -53,8 +55,8 @@ type NytConnectionsResponse = {
 
 type NytIndex = {
   generated_at?: string;
-  timezone?: string; // likely "America/New_York" from your workflow
-  anchor_print_date: string; // the date the workflow considers "today" in NY
+  timezone?: string;
+  anchor_print_date: string;
   range?: { from: number; to: number };
   available: Record<
     string,
@@ -66,6 +68,12 @@ type NytIndex = {
         statusText?: string;
       }
   >;
+};
+
+type AvailableDatesFile = {
+  generated_at?: string;
+  timezone?: string;
+  dates: string[]; // YYYY-MM-DD[]
 };
 
 function uid(prefix = "g") {
@@ -99,19 +107,15 @@ function fmtLocalYYYYMMDD(d: Date) {
  */
 export function connectionsPuzzleNumber(printDate: string): number {
   const [y, m, d] = printDate.split("-").map(Number);
-
   const dateUtc = Date.UTC(y, m - 1, d);
   const epochUtc = Date.UTC(2023, 5, 12); // June 12, 2023
-  const MS_PER_DAY = 86_400_000;
-
-  return Math.floor((dateUtc - epochUtc) / MS_PER_DAY) + 1;
+  return Math.floor((dateUtc - epochUtc) / 86_400_000) + 1;
 }
 
 function nytToTiles(data: NytConnectionsResponse): Tile[] {
   const allCards = data.categories.flatMap((c) => c.cards);
-  if (allCards.length !== 16) {
+  if (allCards.length !== 16)
     throw new Error(`Expected 16 cards, got ${allCards.length}`);
-  }
 
   return allCards
     .slice()
@@ -124,9 +128,8 @@ function nytToTiles(data: NytConnectionsResponse): Tile[] {
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) {
+  if (!res.ok)
     throw new Error(`Fetch failed: ${res.status} ${res.statusText} (${url})`);
-  }
   return (await res.json()) as T;
 }
 
@@ -136,10 +139,8 @@ function pickBestDateFromIndex(
 ): string | null {
   const avail = index.available ?? {};
   if (avail[preferredDate]?.ok) return preferredDate;
-
-  if (index.anchor_print_date && avail[index.anchor_print_date]?.ok) {
+  if (index.anchor_print_date && avail[index.anchor_print_date]?.ok)
     return index.anchor_print_date;
-  }
 
   const okDates = Object.values(avail)
     .filter((v): v is { ok: true; printDate: string } => (v as any).ok)
@@ -187,7 +188,6 @@ function loadSavedGroups(
     };
     const groups = Array.isArray(parsed.groups) ? parsed.groups : [];
 
-    // Filter out anything invalid (wrong lengths or tile ids not in this puzzle)
     const cleaned: Group[] = [];
     for (const g of groups) {
       if (!g || !Array.isArray(g.tileIds) || g.tileIds.length !== 4) continue;
@@ -217,8 +217,36 @@ function saveGroups(printDate: string, groups: Group[]) {
       JSON.stringify({ groups }),
     );
   } catch {
-    // ignore storage errors (private mode, quota, etc.)
+    // ignore
   }
+}
+
+/* ---------------- date picker helpers ---------------- */
+
+function nearestAvailableDate(
+  target: string,
+  datesAsc: string[],
+): string | null {
+  if (datesAsc.length === 0) return null;
+  if (datesAsc.includes(target)) return target;
+
+  const toDayNum = (s: string) => {
+    const [yy, mm, dd] = s.split("-").map(Number);
+    return Math.floor(Date.UTC(yy, mm - 1, dd) / 86_400_000);
+  };
+
+  const t = toDayNum(target);
+  let best = datesAsc[0];
+  let bestDist = Math.abs(toDayNum(best) - t);
+
+  for (const d of datesAsc) {
+    const dist = Math.abs(toDayNum(d) - t);
+    if (dist < bestDist) {
+      best = d;
+      bestDist = dist;
+    }
+  }
+  return best;
 }
 
 export default function App() {
@@ -236,8 +264,13 @@ export default function App() {
     print_date: string;
     editor?: string;
   } | null>(null);
-
   const [requestedDate, setRequestedDate] = useState<string | null>(null);
+
+  // available dates + picker state
+  const [availableDatesAsc, setAvailableDatesAsc] = useState<string[]>([]);
+  const [pickedDate, setPickedDate] = useState<string>(
+    fmtLocalYYYYMMDD(new Date()),
+  );
 
   const usedColors = useMemo(
     () => new Set(groups.map((g) => g.color)),
@@ -260,14 +293,28 @@ export default function App() {
   // ESC closes modal
   useEffect(() => {
     if (!showColorPicker) return;
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setShowColorPicker(false);
-    };
-
+    const onKeyDown = (e: KeyboardEvent) =>
+      e.key === "Escape" && setShowColorPicker(false);
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [showColorPicker]);
+
+  // Load available-dates.json (truth from disk)
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await fetchJson<AvailableDatesFile>(
+          nytUrl("nyt/available-dates.json"),
+        );
+        const dates = Array.isArray(data.dates)
+          ? data.dates.slice().sort()
+          : [];
+        setAvailableDatesAsc(dates);
+      } catch {
+        setAvailableDatesAsc([]);
+      }
+    })();
+  }, []);
 
   async function loadPuzzleByDate(dateStr: string) {
     setLoading(true);
@@ -286,14 +333,30 @@ export default function App() {
       setTiles(nextTiles);
       setBaseTiles(nextTiles);
 
-      // restore saved groups for this print_date (only categorized things + color)
+      // restore saved groups for this print_date
       const saved = loadSavedGroups(data.print_date, tileIdSet);
       setGroups(saved);
+
+      // keep picker in sync with actual loaded date
+      setPickedDate(data.print_date);
 
       setSelected(new Set());
       setShowColorPicker(false);
       setLoading(false);
     };
+
+    // ✅ CHANGE: try the exact date file FIRST (so old dates load properly)
+    try {
+      const data = await fetchJson<NytConnectionsResponse>(
+        nytUrl(`nyt/${dateStr}.json`),
+      );
+      if (data.status !== "OK")
+        throw new Error(`Puzzle status not OK: ${data.status}`);
+      applyLoadedPuzzle(data);
+      return;
+    } catch {
+      // fall through to index.json / latest
+    }
 
     try {
       const index = await fetchJson<NytIndex>(nytUrl("nyt/index.json"));
@@ -305,23 +368,9 @@ export default function App() {
         );
         if (data.status !== "OK")
           throw new Error(`Puzzle status not OK: ${data.status}`);
-
         applyLoadedPuzzle(data);
         return;
       }
-    } catch {
-      // fall through
-    }
-
-    try {
-      const data = await fetchJson<NytConnectionsResponse>(
-        nytUrl(`nyt/${dateStr}.json`),
-      );
-      if (data.status !== "OK")
-        throw new Error(`Puzzle status not OK: ${data.status}`);
-
-      applyLoadedPuzzle(data);
-      return;
     } catch {
       // fall through
     }
@@ -332,7 +381,6 @@ export default function App() {
       );
       if (data.status !== "OK")
         throw new Error(`Puzzle status not OK: ${data.status}`);
-
       applyLoadedPuzzle(data);
       return;
     } catch (e: any) {
@@ -341,9 +389,10 @@ export default function App() {
     }
   }
 
-  // Load puzzle for *local* day on mount
+  // Default on load/reload: current local day
   useEffect(() => {
     const localDate = fmtLocalYYYYMMDD(new Date());
+    setPickedDate(localDate);
     loadPuzzleByDate(localDate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -360,14 +409,11 @@ export default function App() {
 
     setSelected((prev) => {
       const next = new Set(prev);
-
       if (next.has(tileId)) {
         next.delete(tileId);
         return next;
       }
-
       if (next.size >= 4) return next;
-
       next.add(tileId);
       return next;
     });
@@ -395,14 +441,10 @@ export default function App() {
 
   const categorize = (color: ColorKey) => {
     if (selected.size !== 4) return;
-
-    // block reuse of a color
     if (groups.some((g) => g.color === color)) return;
 
     const tileIds = Array.from(selected);
-    for (const id of tileIds) {
-      if (groupedTileIds.has(id)) return;
-    }
+    for (const id of tileIds) if (groupedTileIds.has(id)) return;
 
     const newGroup: Group = { id: uid("group"), color, tileIds };
     setGroups((prev) => [...prev, newGroup]);
@@ -411,41 +453,28 @@ export default function App() {
     clearSelection();
   };
 
-  /**
-   * ✅ Ordering fix:
-   * When ungrouping, move the group's tiles to the front of `tiles[]` so they
-   * don't snap back to their old positions.
-   */
   const bringTileIdsToFront = (tileIds: string[]) => {
     setTiles((prev) => {
       const frontSet = new Set(tileIds);
       const byId = new Map(prev.map((t) => [t.id, t] as const));
-
       const front: Tile[] = tileIds
         .map((id) => byId.get(id))
         .filter((t): t is Tile => Boolean(t));
-
       const rest = prev.filter((t) => !frontSet.has(t.id));
-
       return [...front, ...rest];
     });
   };
 
-  // Click a grouped tile => group dissolves; other 3 remain selected (gray) in grid.
   const onClickGroupedTile = (clickedTileId: string) => {
     const g = groups.find((gr) => gr.tileIds.includes(clickedTileId));
     if (!g) return;
 
     const otherThree = g.tileIds.filter((id) => id !== clickedTileId);
 
-    // remove group
     setGroups((prev) => prev.filter((gr) => gr.id !== g.id));
-
-    // keep other three selected
     setSelected(new Set(otherThree));
     setShowColorPicker(false);
 
-    // ✅ keep visual continuity by preventing "snap back"
     bringTileIdsToFront(g.tileIds);
   };
 
@@ -459,6 +488,29 @@ export default function App() {
   const puzzleNumber = nytMeta?.print_date
     ? connectionsPuzzleNumber(nytMeta.print_date)
     : null;
+
+  // date picker handlers
+  const availableDatesDesc = useMemo(
+    () => availableDatesAsc.slice().reverse(),
+    [availableDatesAsc],
+  );
+
+  const onPickDate = (next: string) => {
+    setPickedDate(next);
+
+    if (availableDatesAsc.length > 0) {
+      const nearest = nearestAvailableDate(next, availableDatesAsc);
+      if (nearest) loadPuzzleByDate(nearest);
+      return;
+    }
+
+    loadPuzzleByDate(next);
+  };
+
+  const goToToday = () => {
+    const today = fmtLocalYYYYMMDD(new Date());
+    onPickDate(today);
+  };
 
   return (
     <div className="nytPage">
@@ -486,9 +538,7 @@ export default function App() {
         {(loading || error || nytMeta || requestedDate) && (
           <div className="nytStatus" role="status" aria-live="polite">
             {loading && <div>Loading local puzzle files…</div>}
-
             {!loading && error && <div className="nytError">{error}</div>}
-
             {!loading && !error && (
               <div className="nytMeta">
                 {nytMeta ? (
@@ -506,6 +556,30 @@ export default function App() {
           </div>
         )}
 
+        {/* Date picker */}
+        <div className="nytDateRow">
+          <select
+            className="nytDateSelect"
+            value={pickedDate}
+            onChange={(e) => onPickDate(e.target.value)}
+            aria-label="Pick a date"
+          >
+            {availableDatesDesc.length > 0 ? (
+              availableDatesDesc.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))
+            ) : (
+              <option value={pickedDate}>{pickedDate}</option>
+            )}
+          </select>
+
+          <button className="nytTodayBtn" type="button" onClick={goToToday}>
+            Today
+          </button>
+        </div>
+
         {/* Categorized rows */}
         <section className="nytRows">
           {groups.map((g) => (
@@ -520,7 +594,9 @@ export default function App() {
                       title="Click to uncategorize (keeps other 3 selected)"
                       type="button"
                       className={`nytTile locked ${g.color} ${
-                        t?.text && t.text.length > 7 ? "smallText" : ""
+                        t?.text && t.text.length > smallTextThreshold
+                          ? "smallText"
+                          : ""
                       }`}
                     >
                       {t?.text}
@@ -544,7 +620,7 @@ export default function App() {
                   aria-pressed={isSelected}
                   type="button"
                   className={`nytTile ${isSelected ? "selected" : ""} ${
-                    t.text.length > 7 ? "smallText" : ""
+                    t.text.length > smallTextThreshold ? "smallText" : ""
                   }`}
                 >
                   {t.text}
