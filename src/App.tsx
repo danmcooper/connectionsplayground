@@ -39,7 +39,7 @@ const fallbackTiles: Tile[] = [
   { id: "t16", text: "VALET" },
 ];
 
-const smallTextThreshold = 8; // characters
+const smallTextThreshold = 7; // characters
 
 type NytConnectionsResponse = {
   status: "OK" | string;

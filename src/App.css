@@ -404,7 +404,7 @@ body {
 
 /* Smaller font for long words (smallTextThreshold+ chars) */
 .nytTile.smallText {
-  font-size: 11px;
+  font-size: 10px;
   letter-spacing: 0.03em;
 }
 
