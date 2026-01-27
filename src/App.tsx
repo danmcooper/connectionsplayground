@@ -10,6 +10,8 @@ const COLORS: { key: ColorKey; label: string }[] = [
   { key: "purple", label: "Purple" },
 ];
 
+const COLOR_ORDER: ColorKey[] = ["yellow", "green", "blue", "purple"];
+
 type Tile = { id: string; text: string };
 
 type Group = {
@@ -101,6 +103,18 @@ function fmtLocalYYYYMMDD(d: Date) {
   return `${y}-${m}-${day}`;
 }
 
+/** Parse YYYY-MM-DD as a local-midnight Date */
+function parseLocalYMD(ymd: string) {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Date(y, m - 1, d, 0, 0, 0, 0);
+}
+
+function diffDaysLocal(olderYmd: string, newerYmd: string) {
+  const a = parseLocalYMD(olderYmd).getTime();
+  const b = parseLocalYMD(newerYmd).getTime();
+  return Math.floor((b - a) / 86_400_000);
+}
+
 /**
  * Public “Connections Puzzle #” derived from NYT print_date (YYYY-MM-DD).
  * Puzzle #1 = 2023-06-12
@@ -124,6 +138,34 @@ function nytToTiles(data: NytConnectionsResponse): Tile[] {
       id: `nyt_${data.id}_${card.position}`,
       text: card.content.toUpperCase(),
     }));
+}
+
+function buildSolutionByColor(
+  data: NytConnectionsResponse,
+): Record<ColorKey, string[]> | null {
+  if (!Array.isArray(data.categories) || data.categories.length < 4)
+    return null;
+
+  const byColor: Record<ColorKey, string[]> = {
+    yellow: [],
+    green: [],
+    blue: [],
+    purple: [],
+  };
+
+  for (let i = 0; i < 4; i++) {
+    const color = COLOR_ORDER[i];
+    const cat = data.categories[i];
+    const ids = (cat?.cards ?? [])
+      .slice()
+      .sort((a, b) => a.position - b.position)
+      .map((c) => `nyt_${data.id}_${c.position}`);
+
+    if (ids.length !== 4) return null;
+    byColor[color] = ids;
+  }
+
+  return byColor;
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -353,11 +395,10 @@ function DatePicker({
   }, [monthStartUTC]);
 
   const gridCells = useMemo(() => {
-    // 6 rows * 7 cols = 42
     const cells: Array<{ ymd: string; inMonth: boolean; enabled: boolean }> =
       [];
     const start = new Date(monthStartUTC);
-    start.setUTCDate(1 - firstDow); // back to Sunday of week 1
+    start.setUTCDate(1 - firstDow);
 
     for (let i = 0; i < 42; i++) {
       const d = new Date(start);
@@ -365,9 +406,6 @@ function DatePicker({
 
       const ymd = ymdFromUTCDate(d);
       const inMonth = d.getUTCMonth() === monthStartUTC.getUTCMonth();
-
-      // If we have available dates, only enable those.
-      // If not, allow all days.
       const enabled =
         availableDatesAsc.length > 0 ? availableSet.has(ymd) : true;
 
@@ -390,7 +428,6 @@ function DatePicker({
   };
 
   const monthTitle = useMemo(() => {
-    // Use a mid-month date so locale formatting doesn't shift
     const mid = new Date(monthStartUTC);
     mid.setUTCDate(Math.min(15, daysInMonth));
     return mid.toLocaleDateString(undefined, {
@@ -515,6 +552,8 @@ export default function App() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showColorPicker, setShowColorPicker] = useState(false);
 
+  const [showSolveConfirm, setShowSolveConfirm] = useState(false);
+
   // puzzle load status
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -524,6 +563,12 @@ export default function App() {
     editor?: string;
   } | null>(null);
   const [requestedDate, setRequestedDate] = useState<string | null>(null);
+
+  // keep the real solution tile ids by color for current loaded puzzle
+  const [solutionByColor, setSolutionByColor] = useState<Record<
+    ColorKey,
+    string[]
+  > | null>(null);
 
   // available dates + picker state
   const [availableDatesAsc, setAvailableDatesAsc] = useState<string[]>([]);
@@ -549,14 +594,16 @@ export default function App() {
 
   const selectedCount = selected.size;
 
-  // ESC closes color modal
+  // ESC closes color modal + solve confirm modal
   useEffect(() => {
-    if (!showColorPicker) return;
-    const onKeyDown = (e: KeyboardEvent) =>
-      e.key === "Escape" && setShowColorPicker(false);
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setShowColorPicker(false);
+      setShowSolveConfirm(false);
+    };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [showColorPicker]);
+  }, []);
 
   // Load available-dates.json (truth from disk)
   useEffect(() => {
@@ -592,6 +639,9 @@ export default function App() {
       setTiles(nextTiles);
       setBaseTiles(nextTiles);
 
+      // solution for Solve button
+      setSolutionByColor(buildSolutionByColor(data));
+
       // restore saved groups for this print_date
       const saved = loadSavedGroups(data.print_date, tileIdSet);
       setGroups(saved);
@@ -601,6 +651,7 @@ export default function App() {
 
       setSelected(new Set());
       setShowColorPicker(false);
+      setShowSolveConfirm(false);
       setLoading(false);
     };
 
@@ -744,6 +795,7 @@ export default function App() {
     setGroups([]);
     clearSelection();
     setShowColorPicker(false);
+    setShowSolveConfirm(false);
   };
 
   const puzzleNumber = nytMeta?.print_date
@@ -765,6 +817,36 @@ export default function App() {
   const goToToday = () => {
     const today = fmtLocalYYYYMMDD(new Date());
     onPickDate(today);
+  };
+
+  // Solve enabled only for puzzles two days previous and earlier (>= 2 days old)
+  const solveEnabled = useMemo(() => {
+    if (!nytMeta?.print_date) return false;
+    if (!solutionByColor) return false;
+    if (loading) return false;
+    const today = fmtLocalYYYYMMDD(new Date());
+    const ageDays = diffDaysLocal(nytMeta.print_date, today);
+    return ageDays >= 2;
+  }, [nytMeta?.print_date, solutionByColor, loading]);
+
+  const onSolveClick = () => {
+    if (!solveEnabled) return;
+    setShowSolveConfirm(true);
+  };
+
+  const applySolve = () => {
+    if (!nytMeta?.print_date || !solutionByColor) return;
+
+    const solved: Group[] = COLOR_ORDER.map((color) => ({
+      id: uid("solve"),
+      color,
+      tileIds: solutionByColor[color],
+    }));
+
+    setGroups(solved);
+    setSelected(new Set());
+    setShowColorPicker(false);
+    setShowSolveConfirm(false);
   };
 
   return (
@@ -834,7 +916,11 @@ export default function App() {
                       onClick={() => onClickGroupedTile(id)}
                       title="Click to uncategorize (keeps other 3 selected)"
                       type="button"
-                      className={`nytTile locked ${g.color} ${t?.text && t.text.length > smallTextThreshold ? "smallText" : ""}`}
+                      className={`nytTile locked ${g.color} ${
+                        t?.text && t.text.length > smallTextThreshold
+                          ? "smallText"
+                          : ""
+                      }`}
                     >
                       {t?.text}
                     </button>
@@ -856,7 +942,9 @@ export default function App() {
                   onClick={() => toggleSelect(t.id)}
                   aria-pressed={isSelected}
                   type="button"
-                  className={`nytTile ${isSelected ? "selected" : ""} ${t.text.length > smallTextThreshold ? "smallText" : ""}`}
+                  className={`nytTile ${isSelected ? "selected" : ""} ${
+                    t.text.length > smallTextThreshold ? "smallText" : ""
+                  }`}
                 >
                   {t.text}
                 </button>
@@ -889,6 +977,20 @@ export default function App() {
           >
             Categorize
           </button>
+
+          {/* <button
+            className="pillBtn danger"
+            onClick={onSolveClick}
+            disabled={!solveEnabled}
+            type="button"
+            title={
+              solveEnabled
+                ? "Reveal the real groups"
+                : "Available for puzzles at least 2 days old"
+            }
+          >
+            Solve
+          </button> */}
         </section>
 
         <div className="nytBottomBar">
@@ -896,12 +998,22 @@ export default function App() {
             Reset
           </button>
 
-          <span className="tiny">
-            Selected: <b>{selectedCount}</b>/4
-          </span>
+          <button
+            className="linkBtn solve"
+            onClick={onSolveClick}
+            disabled={!solveEnabled}
+            type="button"
+            title={
+              solveEnabled
+                ? "Reveal the real groups"
+                : "Available for puzzles at least 2 days old"
+            }
+          >
+            Solve
+          </button>
         </div>
 
-        {/* Centered, smaller modal */}
+        {/* Color picker modal */}
         {showColorPicker && (
           <div
             className="modalOverlay"
@@ -941,6 +1053,44 @@ export default function App() {
               >
                 Cancel
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* Solve confirm modal */}
+        {showSolveConfirm && (
+          <div
+            className="modalOverlay"
+            onClick={() => setShowSolveConfirm(false)}
+          >
+            <div
+              className="modal small"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+            >
+              <div className="modalTitle">Are you sure?</div>
+              <div className="modalText">
+                This will reveal the real answers and auto-group Yellow, Green,
+                Blue, and Purple.
+              </div>
+
+              <div className="modalActions">
+                <button
+                  className="pillBtn subtle"
+                  type="button"
+                  onClick={() => setShowSolveConfirm(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="pillBtn dangerPrimary"
+                  type="button"
+                  onClick={applySolve}
+                >
+                  Yes, solve
+                </button>
+              </div>
             </div>
           </div>
         )}

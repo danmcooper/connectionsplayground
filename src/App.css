@@ -43,8 +43,7 @@ body,
 #root {
   padding: 0 !important;
   max-width: none !important;
-  display: flex;
-  justify-content: center;
+  display: block; /* important: allow page to scroll on small screens */
 }
 
 * {
@@ -69,8 +68,10 @@ body {
 /* ---------- layout ---------- */
 .nytPage {
   width: 100%;
+  min-height: 100vh;
   display: flex;
   justify-content: center;
+  align-items: flex-start;
   padding: 18px 10px 28px;
 }
 
@@ -231,7 +232,6 @@ body {
   top: 44px;
   left: 50%;
   transform: translateX(-50%);
-  /* width: 280px; */
   background: #fff;
   border: 1px solid rgba(0, 0, 0, 0.18);
   border-radius: 12px;
@@ -467,6 +467,16 @@ body {
   gap: 10px;
 }
 
+/* Optional: on small screens, let 4 buttons wrap nicely */
+@media (max-width: 420px) {
+  .nytControls {
+    flex-wrap: wrap;
+  }
+  .pillBtn {
+    flex: 1 1 calc(50% - 10px);
+  }
+}
+
 .pillBtn {
   flex: 1;
   border-radius: 999px;
@@ -501,6 +511,24 @@ body {
   border-color: rgba(0, 0, 0, 0.18);
 }
 
+/* Danger (Solve) button */
+.pillBtn.danger {
+  background: #fff;
+  color: #b00020;
+  border-color: #b00020;
+}
+
+.pillBtn.danger:hover {
+  filter: none;
+  background: rgba(176, 0, 32, 0.06);
+}
+
+.pillBtn.dangerPrimary {
+  background: #b00020;
+  color: #fff;
+  border-color: #b00020;
+}
+
 .pillBtn.full {
   width: 100%;
   margin-top: 10px;
@@ -525,7 +553,16 @@ body {
 }
 
 .linkBtn:hover {
-  text-decoration: underline;
+  text-decoration: none;
+}
+
+.linkBtn.solve {
+  color: lightgray;
+}
+
+.linkBtn.solve:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .tiny {
@@ -551,7 +588,7 @@ body {
 }
 
 .modal.small {
-  width: min(320px, 92vw);
+  width: min(340px, 92vw);
   padding: 12px;
   border-radius: 12px;
 }
@@ -563,12 +600,29 @@ body {
   text-align: center;
 }
 
+.modalText {
+  font-size: 13px;
+  line-height: 1.35;
+  color: rgba(0, 0, 0, 0.75);
+  text-align: center;
+  margin: 0 0 12px;
+}
+
 .modalRow {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
   justify-content: center;
   margin-bottom: 2px;
+}
+
+.modalActions {
+  display: flex;
+  gap: 10px;
+}
+
+.modalActions .pillBtn {
+  flex: 1;
 }
 
 .colorPill {
