@@ -170,17 +170,6 @@ body {
   margin: 0 0 12px;
 }
 
-.nytDateSelect {
-  border-radius: 999px;
-  padding: 8px 12px;
-  font-weight: 700;
-  font-size: 13px;
-  border: 1px solid rgba(0, 0, 0, 0.25);
-  background: #fff;
-  color: var(--text);
-  cursor: pointer;
-}
-
 .nytTodayBtn {
   border-radius: 999px;
   padding: 8px 12px;
@@ -193,7 +182,158 @@ body {
 }
 
 .nytTodayBtn:hover {
-  text-decoration: underline;
+  text-decoration: none;
+}
+
+/* ---------- sophisticated date picker ---------- */
+.nytDatePicker {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nytNavBtn {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  color: black;
+  width: 48px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  background: #fff;
+  font-weight: 900;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0px;
+}
+
+.nytNavBtn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.nytDateBtn {
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-weight: 800;
+  font-size: 13px;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  background: #fff;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.nytCal {
+  position: absolute;
+  top: 44px;
+  left: 50%;
+  transform: translateX(-50%);
+  /* width: 280px; */
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  border-radius: 12px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+  padding: 10px;
+  z-index: 50;
+}
+
+.nytCalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.nytCalArrow {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  color: black;
+  padding: 0px;
+  width: 48px;
+  height: 32px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  background: #fff;
+  font-weight: 900;
+  font-size: 24px;
+  cursor: pointer;
+}
+
+.nytCalMonth {
+  font-weight: 900;
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.8);
+}
+
+.nytCalDow {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-bottom: 6px;
+}
+
+.nytCalDowCell {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 800;
+  color: rgba(0, 0, 0, 0.45);
+  padding: 4px 0;
+}
+
+.nytCalGrid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.nytCalCell {
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  font-weight: 800;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.nytCalCell.inMonth {
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.nytCalCell.outMonth {
+  color: rgba(0, 0, 0, 0.25);
+}
+
+.nytCalCell.enabled:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.nytCalCell.disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+
+.nytCalCell.selected {
+  border-color: rgba(0, 0, 0, 0.25);
+  outline: 2px solid var(--nyt-blue-ring);
+  outline-offset: 0;
+  background: #fff;
+}
+
+.nytCalClose {
+  margin-top: 10px;
+  width: 100%;
+  border-radius: 999px;
+  padding: 8px 10px;
+  font-weight: 800;
+  font-size: 13px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  background: transparent;
+  cursor: pointer;
+  color: black;
 }
 
 /* ---------- solved rows ---------- */
@@ -265,7 +405,7 @@ body {
   filter: brightness(0.99);
 }
 
-/* Smaller font for long words (8+ chars) */
+/* Smaller font for long words (smallTextThreshold+ chars) */
 .nytTile.smallText {
   font-size: 11px;
   letter-spacing: 0.03em;

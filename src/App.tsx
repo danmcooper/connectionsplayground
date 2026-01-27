@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 
 type ColorKey = "yellow" | "green" | "blue" | "purple";
@@ -221,7 +221,7 @@ function saveGroups(printDate: string, groups: Group[]) {
   }
 }
 
-/* ---------------- date picker helpers ---------------- */
+/* ---------------- date helpers ---------------- */
 
 function nearestAvailableDate(
   target: string,
@@ -247,6 +247,265 @@ function nearestAvailableDate(
     }
   }
   return best;
+}
+
+function clampToAvailable(target: string, datesAsc: string[]): string | null {
+  if (datesAsc.length === 0) return target; // no availability file? allow any
+  return nearestAvailableDate(target, datesAsc);
+}
+
+function formatDateLabel(ymd: string) {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const dt = new Date(y, m - 1, d); // local calendar date
+
+  return dt.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function ymdFromUTCDate(d: Date) {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function monthKeyFromYMD(ymd: string) {
+  return ymd.slice(0, 7); // YYYY-MM
+}
+
+/* ---------------- Sophisticated DatePicker ---------------- */
+
+function DatePicker({
+  value,
+  availableDatesAsc,
+  onChange,
+  onToday,
+}: {
+  value: string;
+  availableDatesAsc: string[];
+  onChange: (next: string) => void;
+  onToday: () => void;
+}) {
+  const availableSet = useMemo(
+    () => new Set(availableDatesAsc),
+    [availableDatesAsc],
+  );
+
+  const [open, setOpen] = useState(false);
+  const [month, setMonth] = useState(() => monthKeyFromYMD(value));
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => setMonth(monthKeyFromYMD(value)), [value]);
+
+  // close on outside click + Escape
+  useEffect(() => {
+    if (!open) return;
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+
+    const onDown = (e: MouseEvent) => {
+      const el = popoverRef.current;
+      if (!el) return;
+      if (!el.contains(e.target as Node)) setOpen(false);
+    };
+
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("mousedown", onDown);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("mousedown", onDown);
+    };
+  }, [open]);
+
+  const idx = availableDatesAsc.indexOf(value);
+  const hasPrev = availableDatesAsc.length > 0 ? idx > 0 : false;
+  const hasNext =
+    availableDatesAsc.length > 0
+      ? idx >= 0 && idx < availableDatesAsc.length - 1
+      : false;
+
+  const goPrev = () => {
+    if (!hasPrev) return;
+    onChange(availableDatesAsc[idx - 1]);
+  };
+
+  const goNext = () => {
+    if (!hasNext) return;
+    onChange(availableDatesAsc[idx + 1]);
+  };
+
+  const monthStartUTC = useMemo(() => {
+    const [y, m] = month.split("-").map(Number);
+    return new Date(Date.UTC(y, m - 1, 1));
+  }, [month]);
+
+  const firstDow = monthStartUTC.getUTCDay(); // 0=Sun
+  const daysInMonth = useMemo(() => {
+    const y = monthStartUTC.getUTCFullYear();
+    const m = monthStartUTC.getUTCMonth();
+    return new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  }, [monthStartUTC]);
+
+  const gridCells = useMemo(() => {
+    // 6 rows * 7 cols = 42
+    const cells: Array<{ ymd: string; inMonth: boolean; enabled: boolean }> =
+      [];
+    const start = new Date(monthStartUTC);
+    start.setUTCDate(1 - firstDow); // back to Sunday of week 1
+
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(start);
+      d.setUTCDate(start.getUTCDate() + i);
+
+      const ymd = ymdFromUTCDate(d);
+      const inMonth = d.getUTCMonth() === monthStartUTC.getUTCMonth();
+
+      // If we have available dates, only enable those.
+      // If not, allow all days.
+      const enabled =
+        availableDatesAsc.length > 0 ? availableSet.has(ymd) : true;
+
+      cells.push({ ymd, inMonth, enabled });
+    }
+    return cells;
+  }, [monthStartUTC, firstDow, availableSet, availableDatesAsc.length]);
+
+  const moveMonth = (delta: number) => {
+    const y = monthStartUTC.getUTCFullYear();
+    const m = monthStartUTC.getUTCMonth();
+    const next = new Date(Date.UTC(y, m + delta, 1));
+    setMonth(ymdFromUTCDate(next).slice(0, 7));
+  };
+
+  const jumpTo = (ymd: string) => {
+    const next = clampToAvailable(ymd, availableDatesAsc);
+    if (next) onChange(next);
+    setOpen(false);
+  };
+
+  const monthTitle = useMemo(() => {
+    // Use a mid-month date so locale formatting doesn't shift
+    const mid = new Date(monthStartUTC);
+    mid.setUTCDate(Math.min(15, daysInMonth));
+    return mid.toLocaleDateString(undefined, {
+      month: "long",
+      year: "numeric",
+    });
+  }, [monthStartUTC, daysInMonth]);
+
+  return (
+    <div className="nytDatePicker" ref={popoverRef}>
+      <button
+        className="nytNavBtn"
+        type="button"
+        disabled={!hasPrev}
+        onClick={goPrev}
+        aria-label="Previous date"
+      >
+        ‹
+      </button>
+
+      <button
+        className="nytDateBtn"
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        title="Pick a date"
+      >
+        {formatDateLabel(value)}
+      </button>
+
+      <button
+        className="nytNavBtn"
+        type="button"
+        disabled={!hasNext}
+        onClick={goNext}
+        aria-label="Next date"
+      >
+        ›
+      </button>
+
+      <button className="nytTodayBtn" type="button" onClick={onToday}>
+        Today
+      </button>
+
+      {open && (
+        <div className="nytCal" role="dialog" aria-label="Date picker">
+          <div className="nytCalHeader">
+            <button
+              className="nytCalArrow"
+              type="button"
+              onClick={() => moveMonth(-1)}
+              aria-label="Previous month"
+            >
+              ‹
+            </button>
+            <div className="nytCalMonth">{monthTitle}</div>
+            <button
+              className="nytCalArrow"
+              type="button"
+              onClick={() => moveMonth(1)}
+              aria-label="Next month"
+            >
+              ›
+            </button>
+          </div>
+
+          <div className="nytCalDow">
+            {["S", "M", "T", "W", "T", "F", "S"].map((d) => (
+              <div key={d} className="nytCalDowCell">
+                {d}
+              </div>
+            ))}
+          </div>
+
+          <div className="nytCalGrid">
+            {gridCells.map((c) => {
+              const day = c.ymd.slice(8, 10);
+              const isSelected = c.ymd === value;
+
+              const cls = [
+                "nytCalCell",
+                c.inMonth ? "inMonth" : "outMonth",
+                c.enabled ? "enabled" : "disabled",
+                isSelected ? "selected" : "",
+              ]
+                .filter(Boolean)
+                .join(" ");
+
+              return (
+                <button
+                  key={c.ymd}
+                  type="button"
+                  className={cls}
+                  disabled={!c.enabled}
+                  onClick={() => jumpTo(c.ymd)}
+                  title={c.enabled ? c.ymd : "Not available"}
+                >
+                  {String(Number(day))}
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            className="nytCalClose"
+            type="button"
+            onClick={() => setOpen(false)}
+          >
+            Close
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function App() {
@@ -290,7 +549,7 @@ export default function App() {
 
   const selectedCount = selected.size;
 
-  // ESC closes modal
+  // ESC closes color modal
   useEffect(() => {
     if (!showColorPicker) return;
     const onKeyDown = (e: KeyboardEvent) =>
@@ -345,7 +604,7 @@ export default function App() {
       setLoading(false);
     };
 
-    // ✅ CHANGE: try the exact date file FIRST (so old dates load properly)
+    // Try exact date file FIRST (so old dates load properly)
     try {
       const data = await fetchJson<NytConnectionsResponse>(
         nytUrl(`nyt/${dateStr}.json`),
@@ -355,9 +614,10 @@ export default function App() {
       applyLoadedPuzzle(data);
       return;
     } catch {
-      // fall through to index.json / latest
+      // fall through
     }
 
+    // Then try index.json best match (for near-today window, future, etc.)
     try {
       const index = await fetchJson<NytIndex>(nytUrl("nyt/index.json"));
       const bestDate = pickBestDateFromIndex(index, dateStr);
@@ -375,6 +635,7 @@ export default function App() {
       // fall through
     }
 
+    // Finally latest.json
     try {
       const data = await fetchJson<NytConnectionsResponse>(
         nytUrl("nyt/latest.json"),
@@ -489,12 +750,6 @@ export default function App() {
     ? connectionsPuzzleNumber(nytMeta.print_date)
     : null;
 
-  // date picker handlers
-  const availableDatesDesc = useMemo(
-    () => availableDatesAsc.slice().reverse(),
-    [availableDatesAsc],
-  );
-
   const onPickDate = (next: string) => {
     setPickedDate(next);
 
@@ -556,28 +811,14 @@ export default function App() {
           </div>
         )}
 
-        {/* Date picker */}
+        {/* Sophisticated date picker */}
         <div className="nytDateRow">
-          <select
-            className="nytDateSelect"
+          <DatePicker
             value={pickedDate}
-            onChange={(e) => onPickDate(e.target.value)}
-            aria-label="Pick a date"
-          >
-            {availableDatesDesc.length > 0 ? (
-              availableDatesDesc.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))
-            ) : (
-              <option value={pickedDate}>{pickedDate}</option>
-            )}
-          </select>
-
-          <button className="nytTodayBtn" type="button" onClick={goToToday}>
-            Today
-          </button>
+            availableDatesAsc={availableDatesAsc}
+            onChange={onPickDate}
+            onToday={goToToday}
+          />
         </div>
 
         {/* Categorized rows */}
@@ -593,11 +834,7 @@ export default function App() {
                       onClick={() => onClickGroupedTile(id)}
                       title="Click to uncategorize (keeps other 3 selected)"
                       type="button"
-                      className={`nytTile locked ${g.color} ${
-                        t?.text && t.text.length > smallTextThreshold
-                          ? "smallText"
-                          : ""
-                      }`}
+                      className={`nytTile locked ${g.color} ${t?.text && t.text.length > smallTextThreshold ? "smallText" : ""}`}
                     >
                       {t?.text}
                     </button>
@@ -619,9 +856,7 @@ export default function App() {
                   onClick={() => toggleSelect(t.id)}
                   aria-pressed={isSelected}
                   type="button"
-                  className={`nytTile ${isSelected ? "selected" : ""} ${
-                    t.text.length > smallTextThreshold ? "smallText" : ""
-                  }`}
+                  className={`nytTile ${isSelected ? "selected" : ""} ${t.text.length > smallTextThreshold ? "smallText" : ""}`}
                 >
                   {t.text}
                 </button>
