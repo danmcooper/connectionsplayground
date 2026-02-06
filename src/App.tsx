@@ -12,7 +12,33 @@ const COLORS: { key: ColorKey; label: string }[] = [
 
 const COLOR_ORDER: ColorKey[] = ["yellow", "green", "blue", "purple"];
 
-type Tile = { id: string; text: string };
+type Tile =
+  | { id: string; kind: "text"; text: string }
+  | { id: string; kind: "image"; imageUrl: string; alt: string };
+
+function isImageTile(t: Tile): t is Extract<Tile, { kind: "image" }> {
+  return t.kind === "image";
+}
+
+function getTileText(t: Tile): string {
+  // Used for sizing logic + fallback; for images use alt text
+  return isImageTile(t) ? t.alt : t.text;
+}
+
+function TileFace({ tile }: { tile: Tile }) {
+  if (isImageTile(tile)) {
+    return (
+      <img
+        className="nytTileImg"
+        src={tile.imageUrl}
+        alt={tile.alt}
+        loading="lazy"
+        draggable={false}
+      />
+    );
+  }
+  return <>{tile.text}</>;
+}
 
 type Group = {
   id: string;
@@ -21,22 +47,22 @@ type Group = {
 };
 
 const fallbackTiles: Tile[] = [
-  { id: "t1", text: "STONE" },
-  { id: "t2", text: "TEMPLE" },
-  { id: "t3", text: "PILOT" },
-  { id: "t4", text: "LIP" },
-  { id: "t5", text: "STREET" },
-  { id: "t6", text: "CHEEK" },
-  { id: "t7", text: "FOOT" },
-  { id: "t8", text: "TRAFFIC" },
-  { id: "t9", text: "EYE" },
-  { id: "t10", text: "ACRE" },
-  { id: "t11", text: "FLOOD" },
-  { id: "t12", text: "METER" },
-  { id: "t13", text: "GARAGE" },
-  { id: "t14", text: "LIME" },
-  { id: "t15", text: "BUSHEL" },
-  { id: "t16", text: "VALET" },
+  { id: "t1", text: "STONE", kind: "text" },
+  { id: "t2", text: "TEMPLE", kind: "text" },
+  { id: "t3", text: "PILOT", kind: "text" },
+  { id: "t4", text: "LIP", kind: "text" },
+  { id: "t5", text: "STREET", kind: "text" },
+  { id: "t6", text: "CHEEK", kind: "text" },
+  { id: "t7", text: "FOOT", kind: "text" },
+  { id: "t8", text: "TRAFFIC", kind: "text" },
+  { id: "t9", text: "EYE", kind: "text" },
+  { id: "t10", text: "ACRE", kind: "text" },
+  { id: "t11", text: "FLOOD", kind: "text" },
+  { id: "t12", text: "METER", kind: "text" },
+  { id: "t13", text: "GARAGE", kind: "text" },
+  { id: "t14", text: "LIME", kind: "text" },
+  { id: "t15", text: "BUSHEL", kind: "text" },
+  { id: "t16", text: "VALET", kind: "text" },
 ];
 
 const smallTextThreshold = 7; // characters
@@ -48,10 +74,10 @@ type NytConnectionsResponse = {
   editor?: string;
   categories: Array<{
     title: string;
-    cards: Array<{
-      content: string;
-      position: number; // 0..15
-    }>;
+    cards: Array<
+      | { content: string; position: number }
+      | { image_url: string; image_alt_text?: string; position: number }
+    >;
   }>;
 };
 
@@ -134,10 +160,28 @@ function nytToTiles(data: NytConnectionsResponse): Tile[] {
   return allCards
     .slice()
     .sort((a, b) => a.position - b.position)
-    .map((card) => ({
-      id: `nyt_${data.id}_${card.position}`,
-      text: card.content.toUpperCase(),
-    }));
+    .map((card) => {
+      const anyCard = card as any;
+
+      if (typeof anyCard.content === "string") {
+        return {
+          id: `nyt_${data.id}_${anyCard.position}`,
+          kind: "text" as const,
+          text: anyCard.content.toUpperCase(),
+        };
+      }
+
+      if (typeof anyCard.image_url === "string") {
+        return {
+          id: `nyt_${data.id}_${anyCard.position}`,
+          kind: "image" as const,
+          imageUrl: anyCard.image_url,
+          alt: ((anyCard.image_alt_text || "image") as string).toUpperCase(),
+        };
+      }
+
+      throw new Error("Unsupported NYT card type");
+    });
 }
 
 function buildSolutionByColor(
@@ -917,12 +961,12 @@ export default function App() {
                       title="Click to uncategorize (keeps other 3 selected)"
                       type="button"
                       className={`nytTile locked ${g.color} ${
-                        t?.text && t.text.length > smallTextThreshold
+                        getTileText(t!).length > smallTextThreshold
                           ? "smallText"
                           : ""
                       }`}
                     >
-                      {t?.text}
+                      <TileFace tile={t!} />
                     </button>
                   );
                 })}
@@ -943,10 +987,12 @@ export default function App() {
                   aria-pressed={isSelected}
                   type="button"
                   className={`nytTile ${isSelected ? "selected" : ""} ${
-                    t.text.length > smallTextThreshold ? "smallText" : ""
+                    getTileText(t).length > smallTextThreshold
+                      ? "smallText"
+                      : ""
                   }`}
                 >
-                  {t.text}
+                  <TileFace tile={t} />
                 </button>
               );
             })}
