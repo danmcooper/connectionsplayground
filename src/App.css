@@ -73,6 +73,7 @@ body {
   justify-content: center;
   align-items: flex-start;
   padding: 18px 10px 28px;
+  height: 100%;
 }
 
 .nytFrame {
@@ -454,6 +455,10 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+.nytTile.imgTile {
+  padding: 0px;
+}
+
 .nytTile:hover {
   filter: brightness(0.99);
 }
@@ -717,8 +722,6 @@ body {
 
 /* Image tiles (e.g., NYT dice pips) */
 .nytTileImg {
-  max-width: 70%;
-  max-height: 70%;
   width: auto;
   height: auto;
   object-fit: contain;

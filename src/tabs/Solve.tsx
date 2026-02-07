@@ -1068,7 +1068,7 @@ export default function Solve() {
                 onClick={() => toggleSelect(t.id)}
                 aria-pressed={isSelected}
                 type="button"
-                className={`nytTile ${isSelected ? "selected" : ""} ${
+                className={`nytTile ${isImageTile(t) ? "imgTile" : ""}  ${isSelected ? "selected" : ""} ${
                   getTileText(t).length > smallTextThreshold ? "smallText" : ""
                 }`}
               >

@@ -249,7 +249,10 @@ function saveTilePos(
   pos: Record<string, { x: number; y: number }>,
 ) {
   try {
-    localStorage.setItem(tilePosKeyForPrintDate(printDate), JSON.stringify(pos));
+    localStorage.setItem(
+      tilePosKeyForPrintDate(printDate),
+      JSON.stringify(pos),
+    );
   } catch {
     // ignore
   }
@@ -585,7 +588,7 @@ function DatePicker({
 
 export default function DragStyle() {
   const [tiles, setTiles] = useState<Tile[]>(fallbackTiles);
-const [groups, setGroups] = useState<Group[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
 
   // puzzle load status
   const [loading, setLoading] = useState(false);
@@ -598,59 +601,64 @@ const [groups, setGroups] = useState<Group[]>([]);
   const [requestedDate, setRequestedDate] = useState<string | null>(null);
 
   // keep the real solution tile ids by color for current loaded puzzle
-// available dates + picker state
+  // available dates + picker state
   const [availableDatesAsc, setAvailableDatesAsc] = useState<string[]>([]);
   const [pickedDate, setPickedDate] = useState<string>(
     fmtLocalYYYYMMDD(new Date()),
   );
-const [isColorMode, setIsColorMode] = useState(false);
-const [selected, setSelected] = useState<Set<string>>(() => new Set());
-const [manualTileColor, setManualTileColor] = useState<
-  Record<string, ColorKey | undefined>
->({});
-const groupedTileIds = useMemo(() => {
+  const [isColorMode, setIsColorMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [manualTileColor, setManualTileColor] = useState<
+    Record<string, ColorKey | undefined>
+  >({});
+  const groupedTileIds = useMemo(() => {
     const s = new Set<string>();
     for (const g of groups) for (const id of g.tileIds) s.add(id);
     return s;
   }, [groups]);
 
   const ungroupedTiles = useMemo(
-  () => tiles.filter((t) => !groupedTileIds.has(t.id)),
-  [tiles, groupedTileIds],
-);
+    () => tiles.filter((t) => !groupedTileIds.has(t.id)),
+    [tiles, groupedTileIds],
+  );
 
-const toggleSelectTile = (tileId: string) => {
-  setSelected((prev) => {
-    const next = new Set(prev);
-    if (next.has(tileId)) next.delete(tileId);
-    else next.add(tileId);
-    return next;
-  });
-};
+  const toggleSelectTile = (tileId: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(tileId)) next.delete(tileId);
+      else next.add(tileId);
+      return next;
+    });
+  };
 
-const deselectAll = () => {
-  setManualTileColor((prev) => {
-    const next = { ...prev };
-    for (const id of selected) delete next[id];
-    return next;
-  });
-  setSelected(new Set());
-};
+  const deselectAll = () => {
+    setManualTileColor((prev) => {
+      const next = { ...prev };
+      for (const id of selected) delete next[id];
+      return next;
+    });
+    setSelected(new Set());
+  };
 
-const applyColorToSelected = (color: ColorKey) => {
-  setManualTileColor((prev) => {
-    const next = { ...prev };
-    for (const id of selected) next[id] = color;
-    return next;
-  });
-  setSelected(new Set());
-};
+  const applyColorToSelected = (color: ColorKey) => {
+    setManualTileColor((prev) => {
+      const next = { ...prev };
+      for (const id of selected) next[id] = color;
+      return next;
+    });
+    setSelected(new Set());
+  };
 
   // Freeform drag (physical tiles)
   const boardRef = useRef<HTMLDivElement | null>(null);
   const [tileSize, setTileSize] = useState<number>(0);
-  const [boardSize, setBoardSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
-  const [tilePos, setTilePos] = useState<Record<string, { x: number; y: number }>>({});
+  const [boardSize, setBoardSize] = useState<{ w: number; h: number }>({
+    w: 0,
+    h: 0,
+  });
+  const [tilePos, setTilePos] = useState<
+    Record<string, { x: number; y: number }>
+  >({});
   const dragStateRef = useRef<{
     id: string;
     dx: number;
@@ -736,7 +744,8 @@ const applyColorToSelected = (color: ColorKey) => {
     });
   }, [ungroupedTiles, tileSize, boardSize.h]);
 
-  const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+  const clamp = (v: number, min: number, max: number) =>
+    Math.max(min, Math.min(max, v));
 
   const onTilePointerDown = (tileId: string) => (e: ReactPointerEvent) => {
     if (isColorMode) return;
@@ -777,7 +786,7 @@ const applyColorToSelected = (color: ColorKey) => {
   const endDrag = () => {
     dragStateRef.current = null;
   };
-// Load available-dates.json (truth from disk)
+  // Load available-dates.json (truth from disk)
   useEffect(() => {
     (async () => {
       try {
@@ -890,7 +899,7 @@ const applyColorToSelected = (color: ColorKey) => {
     if (!storagePrintDate) return;
     saveTilePos(storagePrintDate, tilePos);
   }, [tilePos, storagePrintDate]);
-const puzzleNumber = nytMeta?.print_date
+  const puzzleNumber = nytMeta?.print_date
     ? connectionsPuzzleNumber(nytMeta.print_date)
     : null;
 
@@ -905,154 +914,154 @@ const puzzleNumber = nytMeta?.print_date
 
     loadPuzzleByDate(next);
   };
-const resetAll = () => {
-  if (!storagePrintDate) return;
+  const resetAll = () => {
+    if (!storagePrintDate) return;
 
-  // Clear solved groups
+    // Clear solved groups
     setGroups([]);
 
     // Clear any manual colors + selections
     setManualTileColor({});
     setSelected(new Set());
 
-  // Clear saved groups + drag positions for this print_date
-  try {
-    localStorage.removeItem(storageKeyForPrintDate(storagePrintDate));
-    localStorage.removeItem(tilePosKeyForPrintDate(storagePrintDate));
-  } catch {
-    // ignore
-  }
+    // Clear saved groups + drag positions for this print_date
+    try {
+      localStorage.removeItem(storageKeyForPrintDate(storagePrintDate));
+      localStorage.removeItem(tilePosKeyForPrintDate(storagePrintDate));
+    } catch {
+      // ignore
+    }
 
-  // Clear positions so the initializer lays out a fresh grid
-  setTilePos({});
-};
-return (
+    // Clear positions so the initializer lays out a fresh grid
+    setTilePos({});
+  };
+  return (
     <>
-<div className="nytHeadline">
-          <div className="nytPrompt">Create four groups of four!</div>
+      <div className="nytHeadline">
+        <div className="nytPrompt">Create four groups of four!</div>
+      </div>
+
+      {(loading || error || nytMeta || requestedDate) && (
+        <div className="nytStatus" role="status" aria-live="polite">
+          {loading && <div>Loading local puzzle files…</div>}
+          {!loading && error && <div className="nytError">{error}</div>}
+          {!loading && !error && (
+            <div className="nytMeta">
+              {nytMeta ? (
+                <>
+                  {puzzleNumber !== null ? (
+                    <>Puzzle #{puzzleNumber} • </>
+                  ) : null}
+                  {nytMeta.print_date}
+                </>
+              ) : (
+                <>Requested {requestedDate}</>
+              )}
+            </div>
+          )}
         </div>
+      )}
 
-        {(loading || error || nytMeta || requestedDate) && (
-          <div className="nytStatus" role="status" aria-live="polite">
-            {loading && <div>Loading local puzzle files…</div>}
-            {!loading && error && <div className="nytError">{error}</div>}
-            {!loading && !error && (
-              <div className="nytMeta">
-                {nytMeta ? (
-                  <>
-                    {puzzleNumber !== null ? (
-                      <>Puzzle #{puzzleNumber} • </>
-                    ) : null}
-                    {nytMeta.print_date}
-                  </>
-                ) : (
-                  <>Requested {requestedDate}</>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Sophisticated date picker */}
-        <div className="nytDateRow">
-          <DatePicker
-            value={pickedDate}
-            availableDatesAsc={availableDatesAsc}
-            onChange={onPickDate}
-            onReset={resetAll}
-          />
-        </div>
-
-{/* Color mode toggle */}
-<div className="nytSubTabsRow">
-  <nav className="nytTabs nytSubTabs" aria-label="Drag style controls">
-    <button
-      type="button"
-      className={`nytTabBtn nytColorToggle ${isColorMode ? "active" : ""}`}
-      aria-pressed={isColorMode}
-      onClick={() => {
-        setIsColorMode((v) => {
-          const next = !v;
-          if (!next) setSelected(new Set());
-          return next;
-        });
-      }}
-    >
-      Color
-    </button>
-
-    <div
-      className={`nytInlineColorMenu ${
-        isColorMode && selected.size > 0 ? "enabled" : "disabled"
-      }`}
-      aria-label="Color selected tiles"
-    >
-      <button
-        type="button"
-        className="nytInlineIcon"
-        onClick={deselectAll}
-        disabled={!isColorMode || selected.size === 0}
-        aria-label="Clear color selection"
-        title="Clear selection"
-      >
-        ×
-      </button>
-
-      {SELECT_COLOR_OPTIONS.map((c) => (
-        <button
-          key={c.key}
-          type="button"
-          className={`colorPill ${c.key} nytInlineColorPill`}
-          onClick={() => applyColorToSelected(c.key)}
-          disabled={!isColorMode || selected.size === 0}
-          aria-disabled={!isColorMode || selected.size === 0}
-          aria-label={c.label}
-          title={c.label}
+      {/* Sophisticated date picker */}
+      <div className="nytDateRow">
+        <DatePicker
+          value={pickedDate}
+          availableDatesAsc={availableDatesAsc}
+          onChange={onPickDate}
+          onReset={resetAll}
         />
-      ))}
-    </div>
-  </nav>
-</div>
+      </div>
 
-{/* Main grid */}
-        <section className="nytGridWrap">
-          <div
-            ref={boardRef}
-            className="nytFreeBoard"
-            onPointerMove={onBoardPointerMove}
-            onPointerUp={endDrag}
-            onPointerCancel={endDrag}
-            style={{ height: boardSize.h || undefined }}
+      {/* Color mode toggle */}
+      <div className="nytSubTabsRow">
+        <nav className="nytTabs nytSubTabs" aria-label="Drag style controls">
+          <button
+            type="button"
+            className={`nytTabBtn nytColorToggle ${isColorMode ? "active" : ""}`}
+            aria-pressed={isColorMode}
+            onClick={() => {
+              setIsColorMode((v) => {
+                const next = !v;
+                if (!next) setSelected(new Set());
+                return next;
+              });
+            }}
           >
-            {ungroupedTiles.map((t, idx) => {
-              const p = tilePos[t.id] ?? { x: 0, y: 0 };
-              const isDragging = dragStateRef.current?.id === t.id;
-              return (
-                <div
-                  key={t.id}
-                  className={`nytTile nytFreeTile ${manualTileColor[t.id] ?? ""} ${
-                    getTileText(t).length > smallTextThreshold ? "smallText" : ""
-                  } ${selected.has(t.id) ? "selected" : ""}`}
-                  onPointerDown={onTilePointerDown(t.id)}
-                  onClick={() => {
-                    if (isColorMode) toggleSelectTile(t.id);
-                  }}
-                  role="button"
-                  tabIndex={0}
-                  style={{
-                    width: tileSize || undefined,
-                    height: tileSize || undefined,
-                    left: p.x,
-                    top: p.y,
-                    zIndex: isDragging ? 50 : idx,
-                  }}
-                >
-                  <TileFace tile={t} />
-                </div>
-              );
-            })}
+            Color
+          </button>
+
+          <div
+            className={`nytInlineColorMenu ${
+              isColorMode && selected.size > 0 ? "enabled" : "disabled"
+            }`}
+            aria-label="Color selected tiles"
+          >
+            <button
+              type="button"
+              className="nytInlineIcon"
+              onClick={deselectAll}
+              disabled={!isColorMode || selected.size === 0}
+              aria-label="Clear color selection"
+              title="Clear selection"
+            >
+              ×
+            </button>
+
+            {SELECT_COLOR_OPTIONS.map((c) => (
+              <button
+                key={c.key}
+                type="button"
+                className={`colorPill ${c.key} nytInlineColorPill`}
+                onClick={() => applyColorToSelected(c.key)}
+                disabled={!isColorMode || selected.size === 0}
+                aria-disabled={!isColorMode || selected.size === 0}
+                aria-label={c.label}
+                title={c.label}
+              />
+            ))}
           </div>
-        </section>
-</>
+        </nav>
+      </div>
+
+      {/* Main grid */}
+      <section className="nytGridWrap">
+        <div
+          ref={boardRef}
+          className="nytFreeBoard"
+          onPointerMove={onBoardPointerMove}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+          style={{ height: boardSize.h || undefined }}
+        >
+          {ungroupedTiles.map((t, idx) => {
+            const p = tilePos[t.id] ?? { x: 0, y: 0 };
+            const isDragging = dragStateRef.current?.id === t.id;
+            return (
+              <div
+                key={t.id}
+                className={`nytTile ${isImageTile(t) ? "imgTile" : ""}  nytFreeTile ${manualTileColor[t.id] ?? ""} ${
+                  getTileText(t).length > smallTextThreshold ? "smallText" : ""
+                } ${selected.has(t.id) ? "selected" : ""}`}
+                onPointerDown={onTilePointerDown(t.id)}
+                onClick={() => {
+                  if (isColorMode) toggleSelectTile(t.id);
+                }}
+                role="button"
+                tabIndex={0}
+                style={{
+                  width: tileSize || undefined,
+                  height: tileSize || undefined,
+                  left: p.x,
+                  top: p.y,
+                  zIndex: isDragging ? 50 : idx,
+                }}
+              >
+                <TileFace tile={t} />
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    </>
   );
 }

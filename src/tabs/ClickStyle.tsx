@@ -552,7 +552,7 @@ export default function ClickStyle() {
   const [baseTiles, setBaseTiles] = useState<Tile[]>(fallbackTiles);
   const [groups, setGroups] = useState<Group[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-// puzzle load status
+  // puzzle load status
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nytMeta, setNytMeta] = useState<{
@@ -563,7 +563,7 @@ export default function ClickStyle() {
   const [requestedDate, setRequestedDate] = useState<string | null>(null);
 
   // keep the real solution tile ids by color for current loaded puzzle
-// available dates + picker state
+  // available dates + picker state
   const [availableDatesAsc, setAvailableDatesAsc] = useState<string[]>([]);
   const [pickedDate, setPickedDate] = useState<string>(
     fmtLocalYYYYMMDD(new Date()),
@@ -786,162 +786,159 @@ export default function ClickStyle() {
 
     loadPuzzleByDate(next);
   };
-return (
+  return (
     <>
-<div className="nytHeadline">
-          <div className="nytPrompt">Create four groups of four!</div>
-        </div>
+      <div className="nytHeadline">
+        <div className="nytPrompt">Create four groups of four!</div>
+      </div>
 
-        {(loading || error || nytMeta || requestedDate) && (
-          <div className="nytStatus" role="status" aria-live="polite">
-            {loading && <div>Loading local puzzle files…</div>}
-            {!loading && error && <div className="nytError">{error}</div>}
-            {!loading && !error && (
-              <div className="nytMeta">
-                {nytMeta ? (
-                  <>
-                    {puzzleNumber !== null ? (
-                      <>Puzzle #{puzzleNumber} • </>
-                    ) : null}
-                    {nytMeta.print_date}
-                  </>
-                ) : (
-                  <>Requested {requestedDate}</>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Sophisticated date picker */}
-        <div className="nytDateRow">
-          <DatePicker
-            value={pickedDate}
-            availableDatesAsc={availableDatesAsc}
-            onChange={onPickDate}
-            onReset={resetAll}
-          />
-        </div>
-        <div className="nytSubTabsRow">
-          <nav className="nytTabs nytSubTabs" aria-label="Click style controls">
-<button
-  className={`nytTabBtn nytColorToggle ${selectedCount === 4 ? "active" : ""}`}
-  onClick={() => {
-    // no modal; visual affordance only
-  }}
-  type="button"
-  aria-pressed={selectedCount === 4}
-  disabled={selectedCount !== 4}
->
-  Color
-</button>
-
-<div
-  className={`nytInlineColorMenu ${
-    selectedCount === 4 ? "enabled" : "disabled"
-  }`}
-  aria-label="Color selected tiles"
->
-  <button
-    type="button"
-    className="nytInlineIcon"
-    onClick={clearSelection}
-    disabled={selectedCount !== 4}
-    aria-label="Clear selection"
-    title="Clear selection"
-  >
-    ×
-  </button>
-
-  {COLORS.map((c) => {
-    const isUsed = groups.some((g) => g.color === c.key);
-    const disabled = selectedCount !== 4 || isUsed;
-    return (
-      <button
-        key={c.key}
-        type="button"
-        className={`colorPill ${c.key} nytInlineColorPill`}
-        onClick={() => categorize(c.key)}
-        disabled={disabled}
-        aria-disabled={disabled}
-        aria-label={c.label}
-        title={isUsed ? "Already used" : c.label}
-      />
-    );
-  })}
-</div>
-          </nav>
-        </div>
-
-        {/* Categorized rows (NO colored enclosing row; only colored tiles) */}
-        <section className={`nytRows ${groups.length === 4 ? "full" : ""}`}>
-          {groups.map((g) => (
-            <div key={g.id} className="nytSolvedRow">
-              <div className="nytGrid">
-                {g.tileIds.map((id) => {
-                  const t = tiles.find((x) => x.id === id);
-                  return (
-                    <button
-                      key={id}
-                      onClick={() => onClickGroupedTile(id)}
-                      title="Click to uncategorize (keeps other 3 selected)"
-                      type="button"
-                      className={`nytTile locked ${g.color} ${
-                        getTileText(t!).length > smallTextThreshold
-                          ? "smallText"
-                          : ""
-                      }`}
-                    >
-                      <TileFace tile={t!} />
-                    </button>
-                  );
-                })}
-              </div>
+      {(loading || error || nytMeta || requestedDate) && (
+        <div className="nytStatus" role="status" aria-live="polite">
+          {loading && <div>Loading local puzzle files…</div>}
+          {!loading && error && <div className="nytError">{error}</div>}
+          {!loading && !error && (
+            <div className="nytMeta">
+              {nytMeta ? (
+                <>
+                  {puzzleNumber !== null ? (
+                    <>Puzzle #{puzzleNumber} • </>
+                  ) : null}
+                  {nytMeta.print_date}
+                </>
+              ) : (
+                <>Requested {requestedDate}</>
+              )}
             </div>
-          ))}
-        </section>
+          )}
+        </div>
+      )}
 
-        {/* Main grid */}
-        <section className="nytGridWrap">
-          <div className="nytGrid">
-            {ungroupedTiles.map((t) => {
-              const isSelected = selected.has(t.id);
+      {/* Sophisticated date picker */}
+      <div className="nytDateRow">
+        <DatePicker
+          value={pickedDate}
+          availableDatesAsc={availableDatesAsc}
+          onChange={onPickDate}
+          onReset={resetAll}
+        />
+      </div>
+      <div className="nytSubTabsRow">
+        <nav className="nytTabs nytSubTabs" aria-label="Click style controls">
+          <button
+            className={`nytTabBtn nytColorToggle ${selectedCount === 4 ? "active" : ""}`}
+            onClick={() => {
+              // no modal; visual affordance only
+            }}
+            type="button"
+            aria-pressed={selectedCount === 4}
+            disabled={selectedCount !== 4}
+          >
+            Color
+          </button>
+
+          <div
+            className={`nytInlineColorMenu ${
+              selectedCount === 4 ? "enabled" : "disabled"
+            }`}
+            aria-label="Color selected tiles"
+          >
+            <button
+              type="button"
+              className="nytInlineIcon"
+              onClick={clearSelection}
+              disabled={selectedCount !== 4}
+              aria-label="Clear selection"
+              title="Clear selection"
+            >
+              ×
+            </button>
+
+            {COLORS.map((c) => {
+              const isUsed = groups.some((g) => g.color === c.key);
+              const disabled = selectedCount !== 4 || isUsed;
               return (
                 <button
-                  key={t.id}
-                  onClick={() => toggleSelect(t.id)}
-                  aria-pressed={isSelected}
+                  key={c.key}
                   type="button"
-                  className={`nytTile ${isSelected ? "selected" : ""} ${
-                    getTileText(t).length > smallTextThreshold
-                      ? "smallText"
-                      : ""
-                  }`}
-                >
-                  <TileFace tile={t} />
-                </button>
+                  className={`colorPill ${c.key} nytInlineColorPill`}
+                  onClick={() => categorize(c.key)}
+                  disabled={disabled}
+                  aria-disabled={disabled}
+                  aria-label={c.label}
+                  title={isUsed ? "Already used" : c.label}
+                />
               );
             })}
           </div>
-        </section>
+        </nav>
+      </div>
 
-        <div className="nytMistakes"></div>
+      {/* Categorized rows (NO colored enclosing row; only colored tiles) */}
+      <section className={`nytRows ${groups.length === 4 ? "full" : ""}`}>
+        {groups.map((g) => (
+          <div key={g.id} className="nytSolvedRow">
+            <div className="nytGrid">
+              {g.tileIds.map((id) => {
+                const t = tiles.find((x) => x.id === id);
+                return (
+                  <button
+                    key={id}
+                    onClick={() => onClickGroupedTile(id)}
+                    title="Click to uncategorize (keeps other 3 selected)"
+                    type="button"
+                    className={`nytTile locked ${g.color} ${
+                      getTileText(t!).length > smallTextThreshold
+                        ? "smallText"
+                        : ""
+                    }`}
+                  >
+                    <TileFace tile={t!} />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </section>
 
-        <section className="nytControls">
-          <button className="pillBtn" onClick={shuffleUngrouped} type="button">
-            Shuffle
-          </button>
+      {/* Main grid */}
+      <section className="nytGridWrap">
+        <div className="nytGrid">
+          {ungroupedTiles.map((t) => {
+            const isSelected = selected.has(t.id);
+            return (
+              <button
+                key={t.id}
+                onClick={() => toggleSelect(t.id)}
+                aria-pressed={isSelected}
+                type="button"
+                className={`nytTile ${isImageTile(t) ? "imgTile" : ""} ${isSelected ? "selected" : ""} ${
+                  getTileText(t).length > smallTextThreshold ? "smallText" : ""
+                }`}
+              >
+                <TileFace tile={t} />
+              </button>
+            );
+          })}
+        </div>
+      </section>
 
-          <button
-            className="pillBtn"
-            onClick={clearSelection}
-            disabled={selectedCount === 0}
-            type="button"
-          >
-            Deselect All
-          </button>
+      <div className="nytMistakes"></div>
 
-        </section>
-</>
+      <section className="nytControls">
+        <button className="pillBtn" onClick={shuffleUngrouped} type="button">
+          Shuffle
+        </button>
+
+        <button
+          className="pillBtn"
+          onClick={clearSelection}
+          disabled={selectedCount === 0}
+          type="button"
+        >
+          Deselect All
+        </button>
+      </section>
+    </>
   );
 }
