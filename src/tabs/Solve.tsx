@@ -363,7 +363,6 @@ function loadSavedSolveState(
       Number.isFinite(parsed.mistakesRemaining)
         ? Math.max(0, Math.min(4, Math.floor(parsed.mistakesRemaining)))
         : 4;
-    const dismissed = false;
 
     return {
       groups: cleanedGroups,
