@@ -1,1132 +1,173 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import "./App.css";
 
-type ColorKey = "yellow" | "green" | "blue" | "purple";
+import DragStyle from "./tabs/DragStyle";
+import ClickStyle from "./tabs/ClickStyle";
+import Solve from "./tabs/Solve";
 
-const COLORS: { key: ColorKey; label: string }[] = [
-  { key: "yellow", label: "Yellow" },
-  { key: "green", label: "Green" },
-  { key: "blue", label: "Blue" },
-  { key: "purple", label: "Purple" },
-];
+type TabKey = "drag" | "click" | "solve";
 
-const COLOR_ORDER: ColorKey[] = ["yellow", "green", "blue", "purple"];
-
-type Tile =
-  | { id: string; kind: "text"; text: string }
-  | { id: string; kind: "image"; imageUrl: string; alt: string };
-
-function isImageTile(t: Tile): t is Extract<Tile, { kind: "image" }> {
-  return t.kind === "image";
-}
-
-function getTileText(t: Tile): string {
-  // Used for sizing logic + fallback; for images use alt text
-  return isImageTile(t) ? t.alt : t.text;
-}
-
-function TileFace({ tile }: { tile: Tile }) {
-  if (isImageTile(tile)) {
-    return (
-      <img
-        className="nytTileImg"
-        src={tile.imageUrl}
-        alt={tile.alt}
-        loading="lazy"
-        draggable={false}
-      />
-    );
-  }
-  return <>{tile.text}</>;
-}
-
-type Group = {
-  id: string;
-  color: ColorKey;
-  tileIds: string[]; // exactly 4
-};
-
-const fallbackTiles: Tile[] = [
-  { id: "t1", text: "STONE", kind: "text" },
-  { id: "t2", text: "TEMPLE", kind: "text" },
-  { id: "t3", text: "PILOT", kind: "text" },
-  { id: "t4", text: "LIP", kind: "text" },
-  { id: "t5", text: "STREET", kind: "text" },
-  { id: "t6", text: "CHEEK", kind: "text" },
-  { id: "t7", text: "FOOT", kind: "text" },
-  { id: "t8", text: "TRAFFIC", kind: "text" },
-  { id: "t9", text: "EYE", kind: "text" },
-  { id: "t10", text: "ACRE", kind: "text" },
-  { id: "t11", text: "FLOOD", kind: "text" },
-  { id: "t12", text: "METER", kind: "text" },
-  { id: "t13", text: "GARAGE", kind: "text" },
-  { id: "t14", text: "LIME", kind: "text" },
-  { id: "t15", text: "BUSHEL", kind: "text" },
-  { id: "t16", text: "VALET", kind: "text" },
-];
-
-const smallTextThreshold = 7; // characters
-
-type NytConnectionsResponse = {
-  status: "OK" | string;
-  id: number;
-  print_date: string; // YYYY-MM-DD
-  editor?: string;
-  categories: Array<{
-    title: string;
-    cards: Array<
-      | { content: string; position: number }
-      | { image_url: string; image_alt_text?: string; position: number }
-    >;
-  }>;
-};
-
-type NytIndex = {
-  generated_at?: string;
-  timezone?: string;
-  anchor_print_date: string;
-  range?: { from: number; to: number };
-  available: Record<
-    string,
-    | { ok: true; printDate: string; id?: number; editor?: string }
-    | {
-        ok: false;
-        printDate: string;
-        status?: number | string;
-        statusText?: string;
-      }
-  >;
-};
-
-type AvailableDatesFile = {
-  generated_at?: string;
-  timezone?: string;
-  dates: string[]; // YYYY-MM-DD[]
-};
-
-function uid(prefix = "g") {
-  return `${prefix}_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`;
-}
-
-/** Prefix paths with Vite BASE_URL so it works on GitHub Pages (/connectionsplayground/...). */
-function nytUrl(path: string) {
-  const base = import.meta.env.BASE_URL; // "/" locally, "/connectionsplayground/" on Pages
-  const clean = path.replace(/^\//, "");
-  return `${base}${clean}`;
-}
-
-/** YYYY-MM-DD in *browser local time* */
-function fmtLocalYYYYMMDD(d: Date) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(d);
-
-  const y = parts.find((p) => p.type === "year")?.value ?? "1970";
-  const m = parts.find((p) => p.type === "month")?.value ?? "01";
-  const day = parts.find((p) => p.type === "day")?.value ?? "01";
-  return `${y}-${m}-${day}`;
-}
-
-/** Parse YYYY-MM-DD as a local-midnight Date */
-function parseLocalYMD(ymd: string) {
-  const [y, m, d] = ymd.split("-").map(Number);
-  return new Date(y, m - 1, d, 0, 0, 0, 0);
-}
-
-function diffDaysLocal(olderYmd: string, newerYmd: string) {
-  const a = parseLocalYMD(olderYmd).getTime();
-  const b = parseLocalYMD(newerYmd).getTime();
-  return Math.floor((b - a) / 86_400_000);
-}
-
-/**
- * Public “Connections Puzzle #” derived from NYT print_date (YYYY-MM-DD).
- * Puzzle #1 = 2023-06-12
- */
-export function connectionsPuzzleNumber(printDate: string): number {
-  const [y, m, d] = printDate.split("-").map(Number);
-  const dateUtc = Date.UTC(y, m - 1, d);
-  const epochUtc = Date.UTC(2023, 5, 12); // June 12, 2023
-  return Math.floor((dateUtc - epochUtc) / 86_400_000) + 1;
-}
-
-function nytToTiles(data: NytConnectionsResponse): Tile[] {
-  const allCards = data.categories.flatMap((c) => c.cards);
-  if (allCards.length !== 16)
-    throw new Error(`Expected 16 cards, got ${allCards.length}`);
-
-  return allCards
-    .slice()
-    .sort((a, b) => a.position - b.position)
-    .map((card) => {
-      const anyCard = card as any;
-
-      if (typeof anyCard.content === "string") {
-        return {
-          id: `nyt_${data.id}_${anyCard.position}`,
-          kind: "text" as const,
-          text: anyCard.content.toUpperCase(),
-        };
-      }
-
-      if (typeof anyCard.image_url === "string") {
-        return {
-          id: `nyt_${data.id}_${anyCard.position}`,
-          kind: "image" as const,
-          imageUrl: anyCard.image_url,
-          alt: ((anyCard.image_alt_text || "image") as string).toUpperCase(),
-        };
-      }
-
-      throw new Error("Unsupported NYT card type");
-    });
-}
-
-function buildSolutionByColor(
-  data: NytConnectionsResponse,
-): Record<ColorKey, string[]> | null {
-  if (!Array.isArray(data.categories) || data.categories.length < 4)
-    return null;
-
-  const byColor: Record<ColorKey, string[]> = {
-    yellow: [],
-    green: [],
-    blue: [],
-    purple: [],
-  };
-
-  for (let i = 0; i < 4; i++) {
-    const color = COLOR_ORDER[i];
-    const cat = data.categories[i];
-    const ids = (cat?.cards ?? [])
-      .slice()
-      .sort((a, b) => a.position - b.position)
-      .map((c) => `nyt_${data.id}_${c.position}`);
-
-    if (ids.length !== 4) return null;
-    byColor[color] = ids;
-  }
-
-  return byColor;
-}
-
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok)
-    throw new Error(`Fetch failed: ${res.status} ${res.statusText} (${url})`);
-  return (await res.json()) as T;
-}
-
-function pickBestDateFromIndex(
-  index: NytIndex,
-  preferredDate: string,
-): string | null {
-  const avail = index.available ?? {};
-  if (avail[preferredDate]?.ok) return preferredDate;
-  if (index.anchor_print_date && avail[index.anchor_print_date]?.ok)
-    return index.anchor_print_date;
-
-  const okDates = Object.values(avail)
-    .filter((v): v is { ok: true; printDate: string } => (v as any).ok)
-    .map((v) => v.printDate)
-    .sort();
-
-  if (okDates.length === 0) return null;
-
-  const toDayNum = (s: string) => {
-    const [yy, mm, dd] = s.split("-").map(Number);
-    return Math.floor(Date.UTC(yy, mm - 1, dd) / 86_400_000);
-  };
-
-  const target = toDayNum(preferredDate);
-  let best = okDates[0];
-  let bestDist = Math.abs(toDayNum(best) - target);
-
-  for (const d of okDates) {
-    const dist = Math.abs(toDayNum(d) - target);
-    if (dist < bestDist) {
-      best = d;
-      bestDist = dist;
-    }
-  }
-
-  return best;
-}
-
-/* ---------------- localStorage: save only categorized groups + color ---------------- */
-
-function storageKeyForPrintDate(printDate: string) {
-  return `connections-playground::${printDate}`;
-}
-
-function loadSavedGroups(
-  printDate: string,
-  validTileIds: Set<string>,
-): Group[] {
-  try {
-    const raw = localStorage.getItem(storageKeyForPrintDate(printDate));
-    if (!raw) return [];
-
-    const parsed = JSON.parse(raw) as {
-      groups?: Array<Pick<Group, "id" | "color" | "tileIds">>;
-    };
-    const groups = Array.isArray(parsed.groups) ? parsed.groups : [];
-
-    const cleaned: Group[] = [];
-    for (const g of groups) {
-      if (!g || !Array.isArray(g.tileIds) || g.tileIds.length !== 4) continue;
-      if (!g.color) continue;
-      if (
-        g.tileIds.some((id) => typeof id !== "string" || !validTileIds.has(id))
-      )
-        continue;
-
-      cleaned.push({
-        id: typeof g.id === "string" ? g.id : uid("group"),
-        color: g.color as ColorKey,
-        tileIds: g.tileIds,
-      });
-    }
-
-    return cleaned;
-  } catch {
-    return [];
-  }
-}
-
-function saveGroups(printDate: string, groups: Group[]) {
-  try {
-    localStorage.setItem(
-      storageKeyForPrintDate(printDate),
-      JSON.stringify({ groups }),
-    );
-  } catch {
-    // ignore
-  }
-}
-
-/* ---------------- date helpers ---------------- */
-
-function nearestAvailableDate(
-  target: string,
-  datesAsc: string[],
-): string | null {
-  if (datesAsc.length === 0) return null;
-  if (datesAsc.includes(target)) return target;
-
-  const toDayNum = (s: string) => {
-    const [yy, mm, dd] = s.split("-").map(Number);
-    return Math.floor(Date.UTC(yy, mm - 1, dd) / 86_400_000);
-  };
-
-  const t = toDayNum(target);
-  let best = datesAsc[0];
-  let bestDist = Math.abs(toDayNum(best) - t);
-
-  for (const d of datesAsc) {
-    const dist = Math.abs(toDayNum(d) - t);
-    if (dist < bestDist) {
-      best = d;
-      bestDist = dist;
-    }
-  }
-  return best;
-}
-
-function clampToAvailable(target: string, datesAsc: string[]): string | null {
-  if (datesAsc.length === 0) return target; // no availability file? allow any
-  return nearestAvailableDate(target, datesAsc);
-}
-
-function formatDateLabel(ymd: string) {
-  const [y, m, d] = ymd.split("-").map(Number);
-  const dt = new Date(y, m - 1, d); // local calendar date
-
-  return dt.toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function ymdFromUTCDate(d: Date) {
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(d.getUTCDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function monthKeyFromYMD(ymd: string) {
-  return ymd.slice(0, 7); // YYYY-MM
-}
-
-/* ---------------- Sophisticated DatePicker ---------------- */
-
-function DatePicker({
-  value,
-  availableDatesAsc,
-  onChange,
-  onToday,
-}: {
-  value: string;
-  availableDatesAsc: string[];
-  onChange: (next: string) => void;
-  onToday: () => void;
-}) {
-  const availableSet = useMemo(
-    () => new Set(availableDatesAsc),
-    [availableDatesAsc],
+function getCookie(name: string) {
+  const match = document.cookie.match(
+    new RegExp(
+      "(^|; )" + name.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&") + "=([^;]*)",
+    ),
   );
+  return match ? decodeURIComponent(match[2]) : null;
+}
 
-  const [open, setOpen] = useState(false);
-  const [month, setMonth] = useState(() => monthKeyFromYMD(value));
-  const popoverRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => setMonth(monthKeyFromYMD(value)), [value]);
-
-  // close on outside click + Escape
-  useEffect(() => {
-    if (!open) return;
-
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-
-    const onDown = (e: MouseEvent) => {
-      const el = popoverRef.current;
-      if (!el) return;
-      if (!el.contains(e.target as Node)) setOpen(false);
-    };
-
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("mousedown", onDown);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("mousedown", onDown);
-    };
-  }, [open]);
-
-  const idx = availableDatesAsc.indexOf(value);
-  const hasPrev = availableDatesAsc.length > 0 ? idx > 0 : false;
-  const hasNext =
-    availableDatesAsc.length > 0
-      ? idx >= 0 && idx < availableDatesAsc.length - 1
-      : false;
-
-  const goPrev = () => {
-    if (!hasPrev) return;
-    onChange(availableDatesAsc[idx - 1]);
-  };
-
-  const goNext = () => {
-    if (!hasNext) return;
-    onChange(availableDatesAsc[idx + 1]);
-  };
-
-  const monthStartUTC = useMemo(() => {
-    const [y, m] = month.split("-").map(Number);
-    return new Date(Date.UTC(y, m - 1, 1));
-  }, [month]);
-
-  const firstDow = monthStartUTC.getUTCDay(); // 0=Sun
-  const daysInMonth = useMemo(() => {
-    const y = monthStartUTC.getUTCFullYear();
-    const m = monthStartUTC.getUTCMonth();
-    return new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
-  }, [monthStartUTC]);
-
-  const gridCells = useMemo(() => {
-    const cells: Array<{ ymd: string; inMonth: boolean; enabled: boolean }> =
-      [];
-    const start = new Date(monthStartUTC);
-    start.setUTCDate(1 - firstDow);
-
-    for (let i = 0; i < 42; i++) {
-      const d = new Date(start);
-      d.setUTCDate(start.getUTCDate() + i);
-
-      const ymd = ymdFromUTCDate(d);
-      const inMonth = d.getUTCMonth() === monthStartUTC.getUTCMonth();
-      const enabled =
-        availableDatesAsc.length > 0 ? availableSet.has(ymd) : true;
-
-      cells.push({ ymd, inMonth, enabled });
-    }
-    return cells;
-  }, [monthStartUTC, firstDow, availableSet, availableDatesAsc.length]);
-
-  const moveMonth = (delta: number) => {
-    const y = monthStartUTC.getUTCFullYear();
-    const m = monthStartUTC.getUTCMonth();
-    const next = new Date(Date.UTC(y, m + delta, 1));
-    setMonth(ymdFromUTCDate(next).slice(0, 7));
-  };
-
-  const jumpTo = (ymd: string) => {
-    const next = clampToAvailable(ymd, availableDatesAsc);
-    if (next) onChange(next);
-    setOpen(false);
-  };
-
-  const monthTitle = useMemo(() => {
-    const mid = new Date(monthStartUTC);
-    mid.setUTCDate(Math.min(15, daysInMonth));
-    return mid.toLocaleDateString(undefined, {
-      month: "long",
-      year: "numeric",
-    });
-  }, [monthStartUTC, daysInMonth]);
-
-  return (
-    <div className="nytDatePicker" ref={popoverRef}>
-      <button
-        className="nytNavBtn"
-        type="button"
-        disabled={!hasPrev}
-        onClick={goPrev}
-        aria-label="Previous date"
-      >
-        ‹
-      </button>
-
-      <button
-        className="nytDateBtn"
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        title="Pick a date"
-      >
-        {formatDateLabel(value)}
-      </button>
-
-      <button
-        className="nytNavBtn"
-        type="button"
-        disabled={!hasNext}
-        onClick={goNext}
-        aria-label="Next date"
-      >
-        ›
-      </button>
-
-      <button className="nytTodayBtn" type="button" onClick={onToday}>
-        Today
-      </button>
-
-      {open && (
-        <div className="nytCal" role="dialog" aria-label="Date picker">
-          <div className="nytCalHeader">
-            <button
-              className="nytCalArrow"
-              type="button"
-              onClick={() => moveMonth(-1)}
-              aria-label="Previous month"
-            >
-              ‹
-            </button>
-            <div className="nytCalMonth">{monthTitle}</div>
-            <button
-              className="nytCalArrow"
-              type="button"
-              onClick={() => moveMonth(1)}
-              aria-label="Next month"
-            >
-              ›
-            </button>
-          </div>
-
-          <div className="nytCalDow">
-            {["S", "M", "T", "W", "T", "F", "S"].map((d) => (
-              <div key={d} className="nytCalDowCell">
-                {d}
-              </div>
-            ))}
-          </div>
-
-          <div className="nytCalGrid">
-            {gridCells.map((c) => {
-              const day = c.ymd.slice(8, 10);
-              const isSelected = c.ymd === value;
-
-              const cls = [
-                "nytCalCell",
-                c.inMonth ? "inMonth" : "outMonth",
-                c.enabled ? "enabled" : "disabled",
-                isSelected ? "selected" : "",
-              ]
-                .filter(Boolean)
-                .join(" ");
-
-              return (
-                <button
-                  key={c.ymd}
-                  type="button"
-                  className={cls}
-                  disabled={!c.enabled}
-                  onClick={() => jumpTo(c.ymd)}
-                  title={c.enabled ? c.ymd : "Not available"}
-                >
-                  {String(Number(day))}
-                </button>
-              );
-            })}
-          </div>
-
-          <button
-            className="nytCalClose"
-            type="button"
-            onClick={() => setOpen(false)}
-          >
-            Close
-          </button>
-        </div>
-      )}
-    </div>
-  );
+function setCookie(name: string, value: string) {
+  // 1 year
+  document.cookie = `${name}=${encodeURIComponent(value)}; Max-Age=31536000; Path=/; SameSite=Lax`;
 }
 
 export default function App() {
-  const [tiles, setTiles] = useState<Tile[]>(fallbackTiles);
-  const [baseTiles, setBaseTiles] = useState<Tile[]>(fallbackTiles);
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [showColorPicker, setShowColorPicker] = useState(false);
-
-  const [showSolveConfirm, setShowSolveConfirm] = useState(false);
-
-  // puzzle load status
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [nytMeta, setNytMeta] = useState<{
-    id: number;
-    print_date: string;
-    editor?: string;
-  } | null>(null);
-  const [requestedDate, setRequestedDate] = useState<string | null>(null);
-
-  // keep the real solution tile ids by color for current loaded puzzle
-  const [solutionByColor, setSolutionByColor] = useState<Record<
-    ColorKey,
-    string[]
-  > | null>(null);
-
-  // available dates + picker state
-  const [availableDatesAsc, setAvailableDatesAsc] = useState<string[]>([]);
-  const [pickedDate, setPickedDate] = useState<string>(
-    fmtLocalYYYYMMDD(new Date()),
+  const tabs = useMemo(
+    () =>
+      [
+        { key: "drag" as const, label: "Drag Style" },
+        { key: "click" as const, label: "Click Style" },
+        { key: "solve" as const, label: "Solve!" },
+      ] satisfies Array<{ key: TabKey; label: string }>,
+    [],
   );
 
-  const usedColors = useMemo(
-    () => new Set(groups.map((g) => g.color)),
-    [groups],
-  );
+  const [active, setActive] = useState<TabKey>(() => {
+    const fromCookie =
+      typeof document !== "undefined"
+        ? (getCookie("cp_active_tab") as TabKey | null)
+        : null;
+    return fromCookie === "drag" ||
+      fromCookie === "click" ||
+      fromCookie === "solve"
+      ? fromCookie
+      : "drag";
+  });
 
-  const groupedTileIds = useMemo(() => {
-    const s = new Set<string>();
-    for (const g of groups) for (const id of g.tileIds) s.add(id);
-    return s;
-  }, [groups]);
+  const [showHelp, setShowHelp] = useState(false);
 
-  const ungroupedTiles = useMemo(
-    () => tiles.filter((t) => !groupedTileIds.has(t.id)),
-    [tiles, groupedTileIds],
-  );
-
-  const selectedCount = selected.size;
-
-  // ESC closes color modal + solve confirm modal
   useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      setShowColorPicker(false);
-      setShowSolveConfirm(false);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
-
-  // Load available-dates.json (truth from disk)
-  useEffect(() => {
-    (async () => {
-      try {
-        const data = await fetchJson<AvailableDatesFile>(
-          nytUrl("nyt/available-dates.json"),
-        );
-        const dates = Array.isArray(data.dates)
-          ? data.dates.slice().sort()
-          : [];
-        setAvailableDatesAsc(dates);
-      } catch {
-        setAvailableDatesAsc([]);
-      }
-    })();
-  }, []);
-
-  async function loadPuzzleByDate(dateStr: string) {
-    setLoading(true);
-    setError(null);
-    setRequestedDate(dateStr);
-
-    const applyLoadedPuzzle = (data: NytConnectionsResponse) => {
-      const nextTiles = nytToTiles(data);
-      const tileIdSet = new Set(nextTiles.map((t) => t.id));
-
-      setNytMeta({
-        id: data.id,
-        print_date: data.print_date,
-        editor: data.editor,
-      });
-      setTiles(nextTiles);
-      setBaseTiles(nextTiles);
-
-      // solution for Solve button
-      setSolutionByColor(buildSolutionByColor(data));
-
-      // restore saved groups for this print_date
-      const saved = loadSavedGroups(data.print_date, tileIdSet);
-      setGroups(saved);
-
-      // keep picker in sync with actual loaded date
-      setPickedDate(data.print_date);
-
-      setSelected(new Set());
-      setShowColorPicker(false);
-      setShowSolveConfirm(false);
-      setLoading(false);
-    };
-
-    // Try exact date file FIRST (so old dates load properly)
     try {
-      const data = await fetchJson<NytConnectionsResponse>(
-        nytUrl(`nyt/${dateStr}.json`),
-      );
-      if (data.status !== "OK")
-        throw new Error(`Puzzle status not OK: ${data.status}`);
-      applyLoadedPuzzle(data);
-      return;
+      setCookie("cp_active_tab", active);
     } catch {
-      // fall through
+      // ignore
     }
+  }, [active]);
 
-    // Then try index.json best match (for near-today window, future, etc.)
-    try {
-      const index = await fetchJson<NytIndex>(nytUrl("nyt/index.json"));
-      const bestDate = pickBestDateFromIndex(index, dateStr);
-
-      if (bestDate) {
-        const data = await fetchJson<NytConnectionsResponse>(
-          nytUrl(`nyt/${bestDate}.json`),
-        );
-        if (data.status !== "OK")
-          throw new Error(`Puzzle status not OK: ${data.status}`);
-        applyLoadedPuzzle(data);
-        return;
-      }
-    } catch {
-      // fall through
-    }
-
-    // Finally latest.json
-    try {
-      const data = await fetchJson<NytConnectionsResponse>(
-        nytUrl("nyt/latest.json"),
-      );
-      if (data.status !== "OK")
-        throw new Error(`Puzzle status not OK: ${data.status}`);
-      applyLoadedPuzzle(data);
-      return;
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to load local NYT puzzle files");
-      setLoading(false);
-    }
-  }
-
-  // Default on load/reload: current local day
+  // ESC closes help modal
   useEffect(() => {
-    const localDate = fmtLocalYYYYMMDD(new Date());
-    setPickedDate(localDate);
-    loadPuzzleByDate(localDate);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Persist groups whenever they change (keyed by the puzzle print_date)
-  const storagePrintDate = nytMeta?.print_date ?? null;
-  useEffect(() => {
-    if (!storagePrintDate) return;
-    saveGroups(storagePrintDate, groups);
-  }, [groups, storagePrintDate]);
-
-  const toggleSelect = (tileId: string) => {
-    if (groupedTileIds.has(tileId)) return;
-
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(tileId)) {
-        next.delete(tileId);
-        return next;
-      }
-      if (next.size >= 4) return next;
-      next.add(tileId);
-      return next;
-    });
-  };
-
-  const clearSelection = () => setSelected(new Set());
-
-  const shuffleUngrouped = () => {
-    setTiles((prev) => {
-      const ungrouped = prev.filter((t) => !groupedTileIds.has(t.id));
-      for (let i = ungrouped.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [ungrouped[i], ungrouped[j]] = [ungrouped[j], ungrouped[i]];
-      }
-      const grouped = prev.filter((t) => groupedTileIds.has(t.id));
-      return [...ungrouped, ...grouped];
-    });
-    clearSelection();
-  };
-
-  const openCategorize = () => {
-    if (selected.size !== 4) return;
-    setShowColorPicker(true);
-  };
-
-  const categorize = (color: ColorKey) => {
-    if (selected.size !== 4) return;
-    if (groups.some((g) => g.color === color)) return;
-
-    const tileIds = Array.from(selected);
-    for (const id of tileIds) if (groupedTileIds.has(id)) return;
-
-    const newGroup: Group = { id: uid("group"), color, tileIds };
-    setGroups((prev) => [...prev, newGroup]);
-
-    setShowColorPicker(false);
-    clearSelection();
-  };
-
-  const bringTileIdsToFront = (tileIds: string[]) => {
-    setTiles((prev) => {
-      const frontSet = new Set(tileIds);
-      const byId = new Map(prev.map((t) => [t.id, t] as const));
-      const front: Tile[] = tileIds
-        .map((id) => byId.get(id))
-        .filter((t): t is Tile => Boolean(t));
-      const rest = prev.filter((t) => !frontSet.has(t.id));
-      return [...front, ...rest];
-    });
-  };
-
-  const onClickGroupedTile = (clickedTileId: string) => {
-    const g = groups.find((gr) => gr.tileIds.includes(clickedTileId));
-    if (!g) return;
-
-    const otherThree = g.tileIds.filter((id) => id !== clickedTileId);
-
-    setGroups((prev) => prev.filter((gr) => gr.id !== g.id));
-    setSelected(new Set(otherThree));
-    setShowColorPicker(false);
-
-    bringTileIdsToFront(g.tileIds);
-  };
-
-  const resetAll = () => {
-    setTiles(baseTiles);
-    setGroups([]);
-    clearSelection();
-    setShowColorPicker(false);
-    setShowSolveConfirm(false);
-  };
-
-  const puzzleNumber = nytMeta?.print_date
-    ? connectionsPuzzleNumber(nytMeta.print_date)
-    : null;
-
-  const onPickDate = (next: string) => {
-    setPickedDate(next);
-
-    if (availableDatesAsc.length > 0) {
-      const nearest = nearestAvailableDate(next, availableDatesAsc);
-      if (nearest) loadPuzzleByDate(nearest);
-      return;
-    }
-
-    loadPuzzleByDate(next);
-  };
-
-  const goToToday = () => {
-    const today = fmtLocalYYYYMMDD(new Date());
-    onPickDate(today);
-  };
-
-  // Solve enabled only for puzzles two days previous and earlier (>= 2 days old)
-  const solveEnabled = useMemo(() => {
-    if (!nytMeta?.print_date) return false;
-    if (!solutionByColor) return false;
-    if (loading) return false;
-    const today = fmtLocalYYYYMMDD(new Date());
-    const ageDays = diffDaysLocal(nytMeta.print_date, today);
-    return ageDays >= 2;
-  }, [nytMeta?.print_date, solutionByColor, loading]);
-
-  const onSolveClick = () => {
-    if (!solveEnabled) return;
-    setShowSolveConfirm(true);
-  };
-
-  const applySolve = () => {
-    if (!nytMeta?.print_date || !solutionByColor) return;
-
-    const solved: Group[] = COLOR_ORDER.map((color) => ({
-      id: uid("solve"),
-      color,
-      tileIds: solutionByColor[color],
-    }));
-
-    setGroups(solved);
-    setSelected(new Set());
-    setShowColorPicker(false);
-    setShowSolveConfirm(false);
-  };
+    if (!showHelp) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowHelp(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showHelp]);
 
   return (
     <div className="nytPage">
       <div className="nytFrame">
         <header className="nytTopbar">
-          <button className="iconBtn" aria-label="Menu" type="button">
-            ☰
-          </button>
-
           <div className="nytBrand">
-            <div className="nytTitle">Connections Playground</div>
+            <nav className="nytTabs" aria-label="Mode">
+              {tabs.map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  className={`nytTabBtn ${active === t.key ? "active" : ""}`}
+                  aria-current={active === t.key ? "page" : undefined}
+                  onClick={() => setActive(t.key)}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </nav>
           </div>
 
           <div className="nytTopbarRight">
-            <button className="iconBtn" aria-label="Help" type="button">
+            <button
+              className="iconBtn"
+              aria-label="Help"
+              type="button"
+              onClick={() => setShowHelp(true)}
+            >
               ?
             </button>
           </div>
         </header>
 
-        <div className="nytHeadline">
-          <div className="nytPrompt">Create four groups of four!</div>
-        </div>
-
-        {(loading || error || nytMeta || requestedDate) && (
-          <div className="nytStatus" role="status" aria-live="polite">
-            {loading && <div>Loading local puzzle files…</div>}
-            {!loading && error && <div className="nytError">{error}</div>}
-            {!loading && !error && (
-              <div className="nytMeta">
-                {nytMeta ? (
-                  <>
-                    {puzzleNumber !== null ? (
-                      <>Puzzle #{puzzleNumber} • </>
-                    ) : null}
-                    {nytMeta.print_date}
-                  </>
-                ) : (
-                  <>Requested {requestedDate}</>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Sophisticated date picker */}
-        <div className="nytDateRow">
-          <DatePicker
-            value={pickedDate}
-            availableDatesAsc={availableDatesAsc}
-            onChange={onPickDate}
-            onToday={goToToday}
-          />
-        </div>
-
-        {/* Categorized rows (NO colored enclosing row; only colored tiles) */}
-        <section className={`nytRows ${groups.length === 4 ? "full" : ""}`}>
-          {groups.map((g) => (
-            <div key={g.id} className="nytSolvedRow">
-              <div className="nytGrid">
-                {g.tileIds.map((id) => {
-                  const t = tiles.find((x) => x.id === id);
-                  return (
-                    <button
-                      key={id}
-                      onClick={() => onClickGroupedTile(id)}
-                      title="Click to uncategorize (keeps other 3 selected)"
-                      type="button"
-                      className={`nytTile locked ${g.color} ${
-                        getTileText(t!).length > smallTextThreshold
-                          ? "smallText"
-                          : ""
-                      }`}
-                    >
-                      <TileFace tile={t!} />
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </section>
-
-        {/* Main grid */}
-        <section className="nytGridWrap">
-          <div className="nytGrid">
-            {ungroupedTiles.map((t) => {
-              const isSelected = selected.has(t.id);
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => toggleSelect(t.id)}
-                  aria-pressed={isSelected}
-                  type="button"
-                  className={`nytTile ${isSelected ? "selected" : ""} ${
-                    getTileText(t).length > smallTextThreshold
-                      ? "smallText"
-                      : ""
-                  }`}
-                >
-                  <TileFace tile={t} />
-                </button>
-              );
-            })}
-          </div>
-        </section>
-
-        <div className="nytMistakes"></div>
-
-        <section className="nytControls">
-          <button className="pillBtn" onClick={shuffleUngrouped} type="button">
-            Shuffle
-          </button>
-
-          <button
-            className="pillBtn"
-            onClick={clearSelection}
-            disabled={selectedCount === 0}
-            type="button"
+        {/* Keep all tabs mounted so their state (date selection, etc.) is independent */}
+        <div className="nytTabPanels">
+          <div
+            className={active === "drag" ? "nytTabPanel active" : "nytTabPanel"}
           >
-            Deselect All
-          </button>
-
-          <button
-            className="pillBtn primary"
-            onClick={openCategorize}
-            disabled={selectedCount !== 4}
-            type="button"
-          >
-            Categorize
-          </button>
-        </section>
-
-        <div className="nytBottomBar">
-          <button className="linkBtn" onClick={resetAll} type="button">
-            Reset
-          </button>
-
-          <button
-            className="linkBtn solve"
-            onClick={onSolveClick}
-            disabled={!solveEnabled}
-            type="button"
-            title={
-              solveEnabled
-                ? "Reveal the real groups"
-                : "Available for puzzles at least 2 days old"
+            <DragStyle />
+          </div>
+          <div
+            className={
+              active === "click" ? "nytTabPanel active" : "nytTabPanel"
             }
           >
-            Solve
-          </button>
+            <ClickStyle />
+          </div>
+          <div
+            className={
+              active === "solve" ? "nytTabPanel active" : "nytTabPanel"
+            }
+          >
+            <Solve />
+          </div>
         </div>
-
-        {/* Color picker modal */}
-        {showColorPicker && (
-          <div
-            className="modalOverlay"
-            onClick={() => setShowColorPicker(false)}
-          >
-            <div
-              className="modal small"
-              onClick={(e) => e.stopPropagation()}
-              role="dialog"
-              aria-modal="true"
-            >
-              <div className="modalTitle">Categorize as…</div>
-
-              <div className="modalRow">
-                {COLORS.map((c) => {
-                  const isUsed = usedColors.has(c.key);
-                  return (
-                    <button
-                      key={c.key}
-                      className={`colorPill ${c.key}`}
-                      onClick={() => categorize(c.key)}
-                      type="button"
-                      disabled={isUsed}
-                      aria-disabled={isUsed}
-                      title={isUsed ? "Already used" : undefined}
-                    >
-                      {c.label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <button
-                className="pillBtn subtle full"
-                onClick={() => setShowColorPicker(false)}
-                type="button"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Solve confirm modal */}
-        {showSolveConfirm && (
-          <div
-            className="modalOverlay"
-            onClick={() => setShowSolveConfirm(false)}
-          >
-            <div
-              className="modal small"
-              onClick={(e) => e.stopPropagation()}
-              role="dialog"
-              aria-modal="true"
-            >
-              <div className="modalTitle">Are you sure?</div>
-              <div className="modalText">
-                This will reveal the real answers and auto-group Yellow, Green,
-                Blue, and Purple.
-              </div>
-
-              <div className="modalActions">
-                <button
-                  className="pillBtn subtle"
-                  type="button"
-                  onClick={() => setShowSolveConfirm(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="pillBtn dangerPrimary"
-                  type="button"
-                  onClick={applySolve}
-                >
-                  Yes, solve
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
+
+      {showHelp && (
+        <div className="modalOverlay" onClick={() => setShowHelp(false)}>
+          <div
+            className="modal"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="modalTitle">
+              Welciome to the Connections Playground!
+            </div>
+
+            <div className="modalBody">
+              <p>
+                <strong>Overview</strong>: Have you ever wanted to play around
+                with the groupings without having to submit them? This gives you
+                two different ways of doing that, plus a Solve mode where you
+                can actually solve any of the published puzzles going back to
+                2023.
+              </p>
+              <p>
+                <strong>Drag Style</strong>: Move tiles freely like physical
+                tiles. Use the “Color” button to click tiles and paint them
+                yellow/green/blue/purple for visual grouping.
+              </p>
+
+              <p>
+                <strong>Click Style</strong>: Select 4 tiles then group them by
+                color. Keep selecting until all tiles are grouped.
+              </p>
+
+              <p>
+                <strong>Solve!</strong>: Similar to an actual NYT‑style solve
+                experience, but with date selection so you can play older
+                puzzles.
+              </p>
+            </div>
+
+            <button
+              className="pillBtn full"
+              type="button"
+              onClick={() => setShowHelp(false)}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

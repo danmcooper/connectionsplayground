@@ -79,6 +79,10 @@ body {
   width: var(--col);
   max-width: 100%;
   margin: 0 auto;
+
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Ensure all direct sections align centered */
@@ -98,16 +102,49 @@ body {
 .nytTopbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 10px;
   padding: 6px 2px 12px;
 }
 
 .nytBrand {
   flex: 1;
   display: flex;
-  justify-content: center;
+  justify-content: stretch;
 }
 
+/* ---------- tabs in top bar ---------- */
+.nytTabs {
+  width: 100%;
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.nytTabBtn {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  padding: 8px 10px;
+  border-radius: 999px;
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.01em;
+  color: var(--text);
+  cursor: pointer;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.nytTabBtn:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.nytTabBtn.active {
+  background: #fff;
+  box-shadow: var(--tile-shadow);
+}
 .nytTitle {
   font-weight: 900;
   font-size: 18px;
@@ -128,7 +165,7 @@ body {
   padding: 8px;
   border-radius: 999px;
   cursor: pointer;
-  visibility: hidden;
+  color: black;
 }
 
 .iconBtn:hover {
@@ -138,12 +175,14 @@ body {
 /* ---------- headline ---------- */
 .nytHeadline {
   text-align: center;
-  padding: 4px 0 14px;
+  padding: 4px 0 0px;
 }
 
 .nytPrompt {
-  font-size: 14px;
+  font-size: 18px;
   line-height: 1.35;
+  font-weight: 400;
+  font-family: nyt-franklin, Arial;
 }
 
 /* ---------- fetch status/meta ---------- */
@@ -368,6 +407,23 @@ body {
   /* margin-bottom: 10px; */
 }
 
+.nytFreeBoard {
+  position: relative;
+  width: 100%;
+  touch-action: none;
+  user-select: none;
+  overflow: visible;
+}
+
+.nytFreeTile {
+  position: absolute;
+  aspect-ratio: auto;
+  cursor: grab;
+}
+
+.nytFreeTile:active {
+  cursor: grabbing;
+}
 /* ---------- tiles ---------- */
 .nytTile {
   width: 100%;
@@ -570,23 +626,26 @@ body {
 .modalOverlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.35);
-  display: grid;
-  place-items: center;
-  padding: 18px;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 9999;
 }
 
 .modal {
+  width: min(var(--col), 100%);
+  max-width: var(--col);
   background: #fff;
-  border-radius: 14px;
-  padding: 14px;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
 }
 
 .modal.small {
-  width: min(340px, 92vw);
-  padding: 12px;
-  border-radius: 12px;
+  width: min(420px, var(--col), 100%);
+  max-width: var(--col);
 }
 
 .modalTitle {
@@ -669,4 +728,326 @@ body {
 
 .nytTile.selected .nytTileImg {
   filter: invert(1);
+}
+
+/* ---------- tab panels ---------- */
+.nytTabPanels {
+  display: flex;
+  flex: 1;
+  min-height: 0; /* allow children to size within */
+
+  overflow: visible;
+}
+
+.nytTabPanel {
+  display: none;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+
+  overflow: visible;
+}
+
+.nytTabPanel.active {
+  display: block;
+}
+
+/* ---------- Drag Style: Drag/Select sub-tabs ---------- */
+.nytSubTabsRow {
+  margin-top: 8px;
+  margin-bottom: 10px;
+}
+
+.nytSubTabs {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 10px;
+  align-items: center;
+}
+
+.nytColorTabWithMenu {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.nytInlineColorMenu {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nytInlineColorMenu.disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.nytInlineIcon {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 0;
+  background: rgba(0, 0, 0, 0.06);
+  font-size: 20px;
+  font-weight: 900;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nytInlineColorPill {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 0;
+  cursor: pointer;
+}
+
+/* reuse existing color classes (.yellow/.green/.blue/.purple) which set backgrounds */
+.nytInlineColorPill.yellow,
+.nytInlineColorPill.green,
+.nytInlineColorPill.blue,
+.nytInlineColorPill.purple {
+  box-shadow: var(--tile-shadow);
+}
+
+/* Ensure Drag/Select buttons are equal width */
+.nytSubTabs .nytTabBtn {
+  flex: 0 0 80px;
+  justify-content: center;
+  text-align: center;
+}
+
+/* When disabled, desaturate the color controls to make the disabled state obvious */
+.nytInlineColorMenu.disabled .nytInlineColorPill {
+  opacity: 0.45;
+  box-shadow: none;
+}
+.nytInlineColorMenu.disabled .nytInlineIcon {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 0;
+  background: rgba(0, 0, 0, 0.06);
+  font-size: 20px;
+  font-weight: 900;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Drag Style: Color toggle emphasis */
+.nytColorToggle.active {
+  background: #111;
+  color: #fff;
+  box-shadow: var(--tile-shadow);
+}
+
+/* ---------- Solve: mistakes remaining ---------- */
+.nytMistakesRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin: 0px 0 14px 0;
+  font-size: 16px;
+}
+
+.nytMistakesLabel {
+  font-weight: 300;
+}
+
+.nytMistakesDots {
+  display: inline-flex;
+  gap: 14px;
+}
+
+.nytMistakeDot {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: #d7d7d7;
+}
+
+.nytMistakeDot.live {
+  background: #4a4a44;
+}
+
+.nytMistakeDot.used {
+  visibility: hidden;
+}
+
+/* NYT-style solved banner (single 4-wide tile) */
+.nytSolvedBanner {
+  width: 100%;
+  border: 1px solid var(--solved-tile-border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  box-shadow: none;
+  cursor: default;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text);
+  justify-content: center;
+  height: 77.5px;
+}
+
+.nytSolvedBannerTitle {
+  font-weight: 900;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+
+.nytSolvedBannerWords {
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.03em;
+}
+
+.nytSolvedBanner.yellow {
+  background: var(--connections-yellow);
+}
+.nytSolvedBanner.green {
+  background: var(--connections-green);
+}
+.nytSolvedBanner.blue {
+  background: var(--connections-blue);
+}
+.nytSolvedBanner.purple {
+  background: var(--connections-maroon);
+}
+
+/* ---------- Solve: snackbar + results overlay (NYT-ish) ---------- */
+.nytSnack {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  background: rgba(17, 17, 17, 0.92);
+  color: #fff;
+  padding: 12px 16px;
+  border-radius: 999px;
+  font-weight: 700;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  z-index: 1000;
+}
+
+.nytResultsOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 18px;
+  z-index: 1100;
+}
+
+.nytResultsCard {
+  width: min(520px, 100%);
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.25);
+  padding: 18px 18px 22px 18px;
+  position: relative;
+}
+
+.nytResultsTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  margin-bottom: 12px;
+}
+
+.nytResultsBack {
+  background: transparent;
+  border: 0;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  color: #111;
+}
+
+.nytResultsClose {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 0;
+  background: transparent;
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+  color: #111;
+}
+
+.nytResultsTitle {
+  font-family: Georgia, "Times New Roman", Times, serif;
+  font-size: 56px;
+  font-weight: 800;
+  text-align: center;
+  margin: 18px 0 10px 0;
+}
+
+.nytResultsGrid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 18px 0;
+}
+
+.nytResultsRow {
+  display: grid;
+  grid-template-columns: repeat(4, 22px);
+  gap: 2px;
+}
+
+.nytResultsSq {
+  width: 22px;
+  height: 22px;
+  border-radius: 3px;
+  display: block;
+}
+
+.nytResultsSq.yellow {
+  background: var(--connections-yellow);
+}
+.nytResultsSq.green {
+  background: var(--connections-green);
+}
+.nytResultsSq.blue {
+  background: var(--connections-blue);
+}
+.nytResultsSq.purple {
+  background: var(--connections-maroon);
+}
+
+.nytResultsShare {
+  display: block;
+  margin: 0 auto;
+  padding: 14px 18px;
+  border-radius: 999px;
+  border: 2px solid rgba(0, 0, 0, 0.75);
+  background: #fff;
+  color: #111;
+  font-weight: 800;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.nytResultsShare:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+@media (min-width: 421px) {
+  .nytSolvedBanner {
+    height: 102.5px !important;
+  }
 }
