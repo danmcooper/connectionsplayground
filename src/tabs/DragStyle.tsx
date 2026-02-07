@@ -258,20 +258,25 @@ function saveTilePos(
   }
 }
 
-function loadSavedGroups(
+function loadSavedDragState(
   printDate: string,
   validTileIds: Set<string>,
-): Group[] {
+): {
+  groups: Group[];
+  manualTileColor: Record<string, ColorKey | undefined>;
+} {
   try {
     const raw = localStorage.getItem(storageKeyForPrintDate(printDate));
-    if (!raw) return [];
+    if (!raw) return { groups: [], manualTileColor: {} };
 
     const parsed = JSON.parse(raw) as {
       groups?: Array<Pick<Group, "id" | "color" | "tileIds">>;
+      manualTileColor?: Record<string, unknown>;
     };
-    const groups = Array.isArray(parsed.groups) ? parsed.groups : [];
 
-    const cleaned: Group[] = [];
+    // ---- groups ----
+    const groups = Array.isArray(parsed.groups) ? parsed.groups : [];
+    const cleanedGroups: Group[] = [];
     for (const g of groups) {
       if (!g || !Array.isArray(g.tileIds) || g.tileIds.length !== 4) continue;
       if (!g.color) continue;
@@ -280,24 +285,48 @@ function loadSavedGroups(
       )
         continue;
 
-      cleaned.push({
+      cleanedGroups.push({
         id: typeof g.id === "string" ? g.id : uid("group"),
         color: g.color as ColorKey,
         tileIds: g.tileIds,
       });
     }
 
-    return cleaned;
+    // ---- manual colors ----
+    const cleanedManual: Record<string, ColorKey | undefined> = {};
+    const manual = parsed.manualTileColor ?? {};
+    const allowed = new Set<ColorKey>(["yellow", "green", "blue", "purple"]);
+    if (manual && typeof manual === "object") {
+      for (const [id, v] of Object.entries(manual as Record<string, unknown>)) {
+        if (!validTileIds.has(id)) continue;
+        if (typeof v !== "string") continue;
+        if (!allowed.has(v as ColorKey)) continue;
+        cleanedManual[id] = v as ColorKey;
+      }
+    }
+
+    return { groups: cleanedGroups, manualTileColor: cleanedManual };
   } catch {
-    return [];
+    return { groups: [], manualTileColor: {} };
   }
 }
 
-function saveGroups(printDate: string, groups: Group[]) {
+function saveDragState(
+  printDate: string,
+  groups: Group[],
+  manualTileColor: Record<string, ColorKey | undefined>,
+) {
   try {
+    // Only persist defined colors
+    const cleanedManual: Record<string, ColorKey> = {};
+    for (const [id, c] of Object.entries(manualTileColor ?? {})) {
+      if (!c) continue;
+      cleanedManual[id] = c;
+    }
+
     localStorage.setItem(
       storageKeyForPrintDate(printDate),
-      JSON.stringify({ groups }),
+      JSON.stringify({ groups, manualTileColor: cleanedManual }),
     );
   } catch {
     // ignore
@@ -821,7 +850,9 @@ export default function DragStyle() {
       // solution for Solve button
 
       // restore saved groups for this print_date
-      const saved = loadSavedGroups(data.print_date, tileIdSet);
+      const savedState = loadSavedDragState(data.print_date, tileIdSet);
+      const saved = savedState.groups;
+      setManualTileColor(savedState.manualTileColor);
       setGroups(saved);
 
       // restore saved drag positions (Drag Style only)
@@ -892,8 +923,8 @@ export default function DragStyle() {
   const storagePrintDate = nytMeta?.print_date ?? null;
   useEffect(() => {
     if (!storagePrintDate) return;
-    saveGroups(storagePrintDate, groups);
-  }, [groups, storagePrintDate]);
+    saveDragState(storagePrintDate, groups, manualTileColor);
+  }, [groups, manualTileColor, storagePrintDate]);
 
   useEffect(() => {
     if (!storagePrintDate) return;
