@@ -199,10 +199,10 @@ function nytToSolutionGroups(
 
   return data.categories.map((cat, i) => {
     const color = colorByIndex[i] ?? "purple";
-    const tileIds = cat.cards
-      .slice()
-      .sort((a: any, b: any) => a.position - b.position)
-      .map((card: any) => `nyt_${data.id}_${card.position}`);
+    // Preserve the order in the JSON category definition (NOT grid position order)
+    const tileIds = cat.cards.map(
+      (card: any) => `nyt_${data.id}_${card.position}`,
+    );
 
     return { color, title: cat.title, tileIds };
   });
@@ -287,8 +287,10 @@ type SavedSolveState = {
   v?: 1;
   groups?: Array<Pick<Group, "id" | "color" | "tileIds"> & { title?: string }>;
   guesses?: Array<{ id: string; colors: ColorKey[] }>;
+  guessedKeys?: string[];
   mistakesRemaining?: number;
   resultsDismissed?: boolean;
+  didFail?: boolean;
 };
 
 function loadSavedSolveState(
@@ -297,8 +299,10 @@ function loadSavedSolveState(
 ): {
   groups: Group[];
   guesses: GuessRow[];
+  guessedKeys: string[];
   mistakesRemaining: number;
   resultsDismissed: boolean;
+  didFail: boolean;
 } {
   try {
     const raw = getCookie(cookieKeyForPrintDate(printDate));
@@ -306,14 +310,19 @@ function loadSavedSolveState(
       return {
         groups: [],
         guesses: [],
+        guessedKeys: [],
         mistakesRemaining: 4,
-        resultsDismissed: false,
+        resultsDismissed: false, // always re-show results overlay after refresh
+        didFail: false,
       };
     }
 
     const parsed = JSON.parse(raw) as SavedSolveState;
     const rawGroups = Array.isArray(parsed.groups) ? parsed.groups : [];
     const rawGuesses = Array.isArray(parsed.guesses) ? parsed.guesses : [];
+    const rawGuessedKeys = Array.isArray((parsed as any).guessedKeys)
+      ? ((parsed as any).guessedKeys as unknown[])
+      : [];
 
     const cleanedGroups: Group[] = [];
     for (const g of rawGroups) {
@@ -332,6 +341,13 @@ function loadSavedSolveState(
       });
     }
 
+    const cleanedGuessedKeys: string[] = [];
+    for (const k of rawGuessedKeys) {
+      if (typeof k !== "string") continue;
+      if (k.split("|").length !== 4) continue;
+      cleanedGuessedKeys.push(k);
+    }
+
     const cleanedGuesses: GuessRow[] = [];
     for (const gr of rawGuesses) {
       if (!gr || typeof gr.id !== "string") continue;
@@ -347,20 +363,24 @@ function loadSavedSolveState(
       Number.isFinite(parsed.mistakesRemaining)
         ? Math.max(0, Math.min(4, Math.floor(parsed.mistakesRemaining)))
         : 4;
-    const dismissed = Boolean(parsed.resultsDismissed);
+    const dismissed = false;
 
     return {
       groups: cleanedGroups,
       guesses: cleanedGuesses,
+      guessedKeys: cleanedGuessedKeys,
       mistakesRemaining: mr,
-      resultsDismissed: dismissed,
+      resultsDismissed: false, // always re-show results overlay after refresh
+      didFail: Boolean((parsed as any).didFail),
     };
   } catch {
     return {
       groups: [],
       guesses: [],
+      guessedKeys: [],
       mistakesRemaining: 4,
-      resultsDismissed: false,
+      resultsDismissed: false, // always re-show results overlay after refresh
+      didFail: false,
     };
   }
 }
@@ -671,9 +691,30 @@ export default function Solve() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [selectedOrder, setSelectedOrder] = useState<string[]>([]);
   const [guesses, setGuesses] = useState<GuessRow[]>([]);
+  const [guessedKeys, setGuessedKeys] = useState<string[]>([]);
   const [snack, setSnack] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [tileAnim, setTileAnim] = useState<
+    Record<string, "pop" | "shake" | "fly" | undefined>
+  >({});
+  const completionJustHappenedRef = useRef(false);
+  const didReloadRef = useRef(false);
+
+  const sleep = (ms: number) =>
+    new Promise<void>((r) => window.setTimeout(r, ms));
   const [showResults, setShowResults] = useState(false);
   const [resultsDismissed, setResultsDismissed] = useState(false);
+
+  // On a hard page refresh, allow the results modal to auto-open again even if it was opened before.
+  useEffect(() => {
+    const nav = (performance.getEntriesByType("navigation")[0] as any) || null;
+    if (nav?.type === "reload") {
+      didReloadRef.current = true;
+      sessionStorage.removeItem("nytResultsAutoOpened");
+    }
+  }, []);
+
+  const [didFail, setDidFail] = useState(false);
   // puzzle load status
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -703,6 +744,8 @@ export default function Solve() {
   );
 
   const selectedCount = selected.size;
+
+  const isSolved = groups.length === 4;
 
   // ESC closes color modal + solve confirm modal
   useEffect(() => {
@@ -750,9 +793,12 @@ export default function Solve() {
       // defaults (may be overridden by cookie restore below)
       setMistakesRemaining(4);
       setGuesses([]);
+      setGuessedKeys([]);
       setSnack(null);
       setShowResults(false);
       setResultsDismissed(false);
+      completionJustHappenedRef.current = false;
+      setDidFail(false);
       setSelectedOrder([]);
 
       // solution for Solve button
@@ -760,8 +806,10 @@ export default function Solve() {
       const saved = loadSavedSolveState(data.print_date, tileIdSet);
       setGroups(saved.groups);
       setGuesses(saved.guesses);
+      setGuessedKeys(saved.guessedKeys);
       setMistakesRemaining(saved.mistakesRemaining);
       setResultsDismissed(saved.resultsDismissed);
+      setDidFail(saved.didFail);
 
       // keep picker in sync with actual loaded date
       setPickedDate(data.print_date);
@@ -831,10 +879,20 @@ export default function Solve() {
     saveSolveState(storagePrintDate, {
       groups,
       guesses,
+      guessedKeys,
       mistakesRemaining,
       resultsDismissed,
+      didFail,
     });
-  }, [groups, guesses, mistakesRemaining, resultsDismissed, storagePrintDate]);
+  }, [
+    groups,
+    guesses,
+    guessedKeys,
+    mistakesRemaining,
+    resultsDismissed,
+    didFail,
+    storagePrintDate,
+  ]);
 
   const toggleSelect = (tileId: string) => {
     if (groupedTileIds.has(tileId)) return;
@@ -885,7 +943,7 @@ export default function Solve() {
     try {
       await navigator.clipboard.writeText(shareText);
       setSnack("Copied!");
-      window.setTimeout(() => setSnack(null), 900);
+      window.setTimeout(() => setSnack(null), 2000);
     } catch {
       // Fallback: prompt
       try {
@@ -895,7 +953,8 @@ export default function Solve() {
       }
     }
   };
-  const onSubmit = () => {
+  const onSubmit = async () => {
+    if (isSubmitting) return;
     if (selected.size !== 4) return;
     if (mistakesRemaining <= 0) return;
 
@@ -903,28 +962,88 @@ export default function Solve() {
     const pickedInOrder = selectedOrder.filter((id) => selected.has(id));
     const pickedRaw =
       pickedInOrder.length === 4 ? pickedInOrder : Array.from(selected);
-    const picked = pickedRaw.slice().sort();
+    const pickedSorted = pickedRaw.slice().sort();
 
-    // Record guess row in the exact order shown to the user
+    // Duplicate guess detection (order-independent) — no animation, no penalty.
+    const guessKey = pickedSorted.join("|");
+    if (guessedKeys.includes(guessKey)) {
+      setSnack("Already guessed");
+      window.setTimeout(() => setSnack(null), 2000);
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    // "Pop" the 4 selected tiles in sequence (NYT-style)
+    for (const id of pickedRaw.slice(0, 4)) {
+      setTileAnim((prev) => ({ ...prev, [id]: "pop" }));
+      await sleep(90);
+      setTileAnim((prev) => {
+        const next = { ...prev };
+        if (next[id] === "pop") delete next[id];
+        return next;
+      });
+      await sleep(40);
+    }
+
+    const match = solutionGroups.find((sg) => {
+      if (groups.some((g) => g.color === sg.color)) return false; // already solved
+      const sol = sg.tileIds.slice().sort();
+      for (let i = 0; i < sol.length; i++) {
+        if (sol[i] !== pickedSorted[i]) return false;
+      }
+      return true;
+    });
+
+    // Record guess row in the exact order shown to the user (only for new guesses)
     const rowColors = pickedRaw
       .slice(0, 4)
       .map((id) => tileIdToColor.get(id) ?? "purple");
     if (rowColors.length === 4) {
       setGuesses((prev) => [...prev, { id: uid("guess"), colors: rowColors }]);
+      setGuessedKeys((prev) => [...prev, guessKey]);
     }
-    const match = solutionGroups.find((sg) => {
-      if (groups.some((g) => g.color === sg.color)) return false; // already solved
-      const sol = sg.tileIds.slice().sort();
-      for (let i = 0; i < sol.length; i++) {
-        if (sol[i] !== picked[i]) return false;
-      }
-      return true;
-    });
 
     if (!match) {
+      // "One away…" if this guess has 3/4 from any unsolved group.
+      const pickedSet = new Set(pickedRaw);
+      const oneAway = solutionGroups.some((sg) => {
+        if (groups.some((g) => g.color === sg.color)) return false;
+        let inGroup = 0;
+        for (const id of sg.tileIds) if (pickedSet.has(id)) inGroup++;
+        return inGroup === 3;
+      });
+      if (oneAway) {
+        setSnack("One away…");
+        window.setTimeout(() => setSnack(null), 2000);
+      }
+
+      // Wrong: shake all 4 for 1s, then take a mistake. Keep selection.
+      for (const id of pickedRaw.slice(0, 4)) {
+        setTileAnim((prev) => ({ ...prev, [id]: "shake" }));
+      }
+      await sleep(1000);
+      setTileAnim((prev) => {
+        const next = { ...prev };
+        for (const id of pickedRaw.slice(0, 4)) {
+          if (next[id] === "shake") delete next[id];
+        }
+        return next;
+      });
+
       setMistakesRemaining((m) => Math.max(0, m - 1));
-      clearSelection();
+      setIsSubmitting(false);
       return;
+    }
+
+    // Correct: fly tiles upward, then commit group + remove tiles.
+    for (const id of pickedRaw.slice(0, 4)) {
+      setTileAnim((prev) => ({ ...prev, [id]: "fly" }));
+    }
+    await sleep(430);
+
+    if (groups.length === 3) {
+      completionJustHappenedRef.current = true;
     }
 
     const newGroup: Group = {
@@ -936,22 +1055,87 @@ export default function Solve() {
 
     setGroups((prev) => [...prev, newGroup]);
     setTiles((prev) => prev.filter((t) => !new Set(match.tileIds).has(t.id)));
+
+    // Clean up animation state and selection
+    setTileAnim((prev) => {
+      const next = { ...prev };
+      for (const id of pickedRaw.slice(0, 4)) delete next[id];
+      return next;
+    });
+    clearSelection();
+    setIsSubmitting(false);
+  };
+
+  const revealSolution = () => {
+    // Fill in any remaining unsolved groups, remove remaining tiles.
+    const solvedColors = new Set(groups.map((g) => g.color));
+    const nextGroups: Group[] = [...groups];
+    for (const sg of solutionGroups) {
+      if (solvedColors.has(sg.color)) continue;
+      nextGroups.push({
+        id: uid("g"),
+        color: sg.color,
+        title: sg.title,
+        tileIds: sg.tileIds,
+      });
+    }
+    setGroups(nextGroups);
+    setTiles([]);
     clearSelection();
   };
+
+  // If the user runs out of mistakes, show snackbar + auto-solve.
+  useEffect(() => {
+    if (mistakesRemaining > 0) return;
+    if (isSolved) return;
+    if (solutionGroups.length !== 4) return;
+
+    setDidFail(true);
+
+    setSnack("Better Luck Next Time!");
+    completionJustHappenedRef.current = true;
+    revealSolution();
+
+    const t1 = window.setTimeout(() => setSnack(null), 2000);
+    const t2 = window.setTimeout(() => setShowResults(true), 2050);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mistakesRemaining]);
 
   // When all 4 groups are solved: brief snackbar, then results overlay.
   useEffect(() => {
     if (groups.length !== 4) return;
     if (showResults) return;
     if (resultsDismissed) return;
+
+    const shouldAutoOpen =
+      completionJustHappenedRef.current || didReloadRef.current;
+    if (!shouldAutoOpen) return;
+    // Consume the completion flag so navigating around doesn't retrigger.
+    completionJustHappenedRef.current = false;
+    didReloadRef.current = false;
+
+    // If the puzzle was auto-solved due to running out of mistakes, still show
+    // the results overlay, but don't show the "Nice job!" snackbar.
+    if (didFail) {
+      if (!sessionStorage.getItem("nytResultsAutoOpened")) {
+        sessionStorage.setItem("nytResultsAutoOpened", "1");
+        setShowResults(true);
+      }
+      return;
+    }
+
     setSnack("Nice job!");
-    const t1 = window.setTimeout(() => setSnack(null), 900);
-    const t2 = window.setTimeout(() => setShowResults(true), 950);
+    const t1 = window.setTimeout(() => setSnack(null), 2000);
+    const t2 = window.setTimeout(() => setShowResults(true), 2050);
     return () => {
       window.clearTimeout(t1);
       window.clearTimeout(t2);
     };
-  }, [groups.length, showResults, resultsDismissed]);
+  }, [groups.length, showResults, resultsDismissed, didFail]);
 
   const shuffleUngrouped = () => {
     setTiles((prev) => {
@@ -972,6 +1156,12 @@ export default function Solve() {
     clearSelection();
     setMistakesRemaining(4);
     setGuesses([]);
+    setGuessedKeys([]);
+    setSnack(null);
+    setShowResults(false);
+    setResultsDismissed(false);
+    setDidFail(false);
+    setSelectedOrder([]);
   };
 
   const closeResults = () => {
@@ -1040,11 +1230,15 @@ export default function Solve() {
             sg?.title ||
             g.color.toUpperCase()
           ).toUpperCase();
-          const words = g.tileIds
-            .map((id) => {
-              const t = baseTilesById.get(id);
-              return t ? getTileText(t) : "";
-            })
+          const sol = solutionGroups.find((sg) => {
+            const a = sg.tileIds.slice().sort().join("|");
+            const b = g.tileIds.slice().sort().join("|");
+            return a === b;
+          });
+          const orderedIds = sol ? sol.tileIds : g.tileIds;
+          const words = orderedIds
+            .map((id) => baseTilesById.get(id))
+            .map((t) => (t ? getTileText(t) : ""))
             .filter(Boolean)
             .join(", ");
 
@@ -1065,10 +1259,13 @@ export default function Solve() {
             return (
               <button
                 key={t.id}
-                onClick={() => toggleSelect(t.id)}
+                onClick={() => {
+                  if (isSubmitting) return;
+                  toggleSelect(t.id);
+                }}
                 aria-pressed={isSelected}
                 type="button"
-                className={`nytTile ${isImageTile(t) ? "imgTile" : ""}  ${isSelected ? "selected" : ""} ${
+                className={`nytTile ${isImageTile(t) ? "imgTile" : ""}  ${isSelected ? "selected" : ""} ${tileAnim[t.id] ? `anim-${tileAnim[t.id]}` : ""} ${
                   getTileText(t).length > smallTextThreshold ? "smallText" : ""
                 }`}
               >
@@ -1084,14 +1281,24 @@ export default function Solve() {
       <MistakesRemaining remaining={mistakesRemaining} />
 
       <section className="nytControls">
-        <button className="pillBtn" onClick={shuffleUngrouped} type="button">
+        <button
+          className="pillBtn"
+          onClick={() => {
+            if (isSubmitting) return;
+            shuffleUngrouped();
+          }}
+          type="button"
+        >
           Shuffle
         </button>
 
         <button
           className="pillBtn"
-          onClick={clearSelection}
-          disabled={selectedCount === 0}
+          onClick={() => {
+            if (isSubmitting) return;
+            clearSelection();
+          }}
+          disabled={isSubmitting || selectedCount === 0}
           type="button"
         >
           Deselect All
@@ -1099,11 +1306,15 @@ export default function Solve() {
 
         <button
           className="pillBtn primary"
-          onClick={onSubmit}
-          disabled={selected.size !== 4 || mistakesRemaining <= 0}
+          onClick={isSolved ? copyResults : onSubmit}
+          disabled={
+            isSolved
+              ? false
+              : isSubmitting || selected.size !== 4 || mistakesRemaining <= 0
+          }
           type="button"
         >
-          Submit
+          {isSolved ? "Share" : "Submit"}
         </button>
       </section>
 
@@ -1134,7 +1345,9 @@ export default function Solve() {
               </button>
             </div>
 
-            <div className="nytResultsTitle">Great!</div>
+            <div className="nytResultsTitle">
+              {didFail ? "Better Luck Next Time!" : "Great!"}
+            </div>
 
             <div className="nytResultsGrid" aria-label="Results grid">
               {guesses.map((g) => (

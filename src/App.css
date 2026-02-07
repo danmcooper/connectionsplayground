@@ -453,6 +453,12 @@ body {
   padding: 6px;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease,
+    border-color 0.15s ease,
+    opacity 0.15s ease;
 }
 
 .nytTile.imgTile {
@@ -477,6 +483,7 @@ body {
   outline: 2px solid var(--nyt-blue-ring);
   outline-offset: 0;
   box-shadow: 0 2px 0 rgba(0, 0, 0, 0.18);
+  transform: translateZ(0) scale(1.03);
 }
 
 .nytTile:focus-visible {
@@ -516,6 +523,15 @@ body {
   padding: 12px 0 18px;
   font-size: 13px;
   color: var(--muted);
+}
+
+/* ---------- guesses grid (Solve) ---------- */
+
+.nytGuessesTitle {
+  font-size: 13px;
+  font-weight: 800;
+  color: rgba(0, 0, 0, 0.55);
+  letter-spacing: 0.02em;
 }
 
 /* ---------- controls ---------- */
@@ -929,15 +945,31 @@ body {
 .nytSnack {
   position: fixed;
   left: 50%;
-  bottom: 24px;
-  transform: translateX(-50%);
-  background: rgba(17, 17, 17, 0.92);
-  color: #fff;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2147483647;
   padding: 12px 16px;
   border-radius: 999px;
-  font-weight: 700;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
-  z-index: 1000;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+  background: rgba(0, 0, 0, 0.92);
+  color: #fff;
+  opacity: 0;
+  animation: nytSnackFade 2s ease-in-out forwards;
+}
+
+@keyframes nytSnackFade {
+  0% {
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  88% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 
 .nytResultsOverlay {
@@ -1053,4 +1085,76 @@ body {
   .nytSolvedBanner {
     height: 102.5px !important;
   }
+}
+
+/* Solve! submit animations */
+@keyframes nytTilePop {
+  0% {
+    transform: translateZ(0) translateY(0) scale(1.03);
+  }
+  45% {
+    transform: translateZ(0) translateY(-10px) scale(1.03);
+  }
+  100% {
+    transform: translateZ(0) translateY(0) scale(1.03);
+  }
+}
+
+@keyframes nytTileShake {
+  0% {
+    transform: translateZ(0) translateX(0);
+  }
+  10% {
+    transform: translateZ(0) translateX(-8px);
+  }
+  20% {
+    transform: translateZ(0) translateX(8px);
+  }
+  30% {
+    transform: translateZ(0) translateX(-7px);
+  }
+  40% {
+    transform: translateZ(0) translateX(7px);
+  }
+  50% {
+    transform: translateZ(0) translateX(-6px);
+  }
+  60% {
+    transform: translateZ(0) translateX(6px);
+  }
+  70% {
+    transform: translateZ(0) translateX(-4px);
+  }
+  80% {
+    transform: translateZ(0) translateX(4px);
+  }
+  90% {
+    transform: translateZ(0) translateX(-2px);
+  }
+  100% {
+    transform: translateZ(0) translateX(0);
+  }
+}
+
+@keyframes nytTileFlyUp {
+  0% {
+    opacity: 1;
+    transform: translateZ(0) translateY(0) scale(1.03);
+  }
+  100% {
+    opacity: 0;
+    transform: translateZ(0) translateY(-90px) scale(0.98);
+  }
+}
+
+.nytTile.anim-pop {
+  animation: nytTilePop 300ms ease-out;
+}
+
+.nytTile.anim-shake {
+  animation: nytTileShake 300ms ease-in-out;
+}
+
+.nytTile.anim-fly {
+  animation: nytTileFlyUp 300ms ease-in forwards;
 }
