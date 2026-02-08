@@ -108,10 +108,17 @@ export default function App() {
   );
 
   const [active, setActive] = useState<TabKey>(() => {
+    // Read deep-link params synchronously so Solve doesn't do an initial "today" load
+    // and then get overwritten by a slower request (race condition).
+    const { mode, date } = parseQueryParams(getEffectiveSearch());
+    if (mode) return mode;
+    if (date) return "solve";
+
     const fromCookie =
       typeof document !== "undefined"
         ? (getCookie("cp_active_tab") as TabKey | null)
         : null;
+
     return fromCookie === "drag" ||
       fromCookie === "click" ||
       fromCookie === "solve"
@@ -119,7 +126,10 @@ export default function App() {
       : "drag";
   });
 
-  const [queryPrintDate, setQueryPrintDate] = useState<string | null>(null);
+  const [queryPrintDate, setQueryPrintDate] = useState<string | null>(() => {
+    const { date } = parseQueryParams(getEffectiveSearch());
+    return date;
+  });
 
   const [showHelp, setShowHelp] = useState(false);
 

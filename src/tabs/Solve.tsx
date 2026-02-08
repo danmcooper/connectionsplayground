@@ -775,13 +775,18 @@ export default function Solve({
       }
     })();
   }, []);
+  // Prevent older async loads from overwriting newer ones (deep-link race fix)
+  const loadSeqRef = useRef(0);
 
   async function loadPuzzleByDate(dateStr: string) {
     setLoading(true);
     setError(null);
     setRequestedDate(dateStr);
 
+    const seq = ++loadSeqRef.current;
+
     const applyLoadedPuzzle = (data: NytConnectionsResponse) => {
+      if (seq !== loadSeqRef.current) return;
       const nextTiles = nytToTiles(data);
       const tileIdSet = new Set(nextTiles.map((t) => t.id));
 
