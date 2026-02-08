@@ -547,7 +547,11 @@ function DatePicker({
   );
 }
 
-export default function ClickStyle() {
+export default function ClickStyle({
+  initialPrintDate,
+}: {
+  initialPrintDate?: string | null;
+}) {
   const [tiles, setTiles] = useState<Tile[]>(fallbackTiles);
   const [baseTiles, setBaseTiles] = useState<Tile[]>(fallbackTiles);
   const [groups, setGroups] = useState<Group[]>([]);
@@ -684,12 +688,22 @@ export default function ClickStyle() {
   }
 
   // Default on load/reload: current local day
+  const initialAppliedRef = useRef<string | null>(null);
   useEffect(() => {
-    const localDate = fmtLocalYYYYMMDD(new Date());
-    setPickedDate(localDate);
-    loadPuzzleByDate(localDate);
+    const fromQuery =
+      typeof initialPrintDate === "string" &&
+      /^\d{4}-\d{2}-\d{2}$/.test(initialPrintDate)
+        ? initialPrintDate
+        : null;
+
+    const desired = fromQuery ?? fmtLocalYYYYMMDD(new Date());
+    if (initialAppliedRef.current === desired) return;
+    initialAppliedRef.current = desired;
+
+    setPickedDate(desired);
+    loadPuzzleByDate(desired);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [initialPrintDate]);
 
   // Persist groups whenever they change (keyed by the puzzle print_date)
   const storagePrintDate = nytMeta?.print_date ?? null;

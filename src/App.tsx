@@ -32,26 +32,30 @@ function puzzleNumberToPrintDate(puzzleNumber: number): string | null {
   return `${y}-${m}-${d}`;
 }
 
-function parseSolveRoute(pathname: string): { date: string } | null {
-  // Supported:
-  //  - /solve/date/2026-02-08
-  //  - /solve/number/973
-  // Also supports being hosted under a base path (e.g., /connectionsplayground/solve/date/...)
-  const idx = pathname.indexOf("/solve/");
-  if (idx === -1) return null;
+function parseQueryParams(search: string): {
+  mode: TabKey | null;
+  date: string | null;
+} {
+  const params = new URLSearchParams(search);
 
-  const clean = pathname.slice(idx).replace(/\/+$/, "");
-  const byDate = clean.match(/^\/solve\/date\/(\d{4}-\d{2}-\d{2})$/);
-  if (byDate) return { date: byDate[1] };
+  const modeRaw = params.get("mode");
+  const mode: TabKey | null =
+    modeRaw === "drag" || modeRaw === "click" || modeRaw === "solve"
+      ? (modeRaw as TabKey)
+      : null;
 
-  const byNumber = clean.match(/^\/solve\/number\/(\d+)$/);
-  if (byNumber) {
-    const n = Number(byNumber[1]);
-    const date = puzzleNumberToPrintDate(n);
-    return date ? { date } : null;
+  // puzzle takes precedence over date if both provided
+  const puzzleRaw = params.get("puzzle");
+  if (puzzleRaw) {
+    const n = Number(puzzleRaw);
+    const dateFromPuzzle = puzzleNumberToPrintDate(n);
+    if (dateFromPuzzle) return { mode, date: dateFromPuzzle };
   }
 
-  return null;
+  const dateRaw = params.get("date");
+  const date = dateRaw && /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : null;
+
+  return { mode, date };
 }
 
 export default function App() {
@@ -77,27 +81,35 @@ export default function App() {
       : "drag";
   });
 
-  const [solveRouteDate, setSolveRouteDate] = useState<string | null>(null);
+  const [queryPrintDate, setQueryPrintDate] = useState<string | null>(null);
 
   const [showHelp, setShowHelp] = useState(false);
 
-  // Deep-link support:
-  //   /solve/date/2026-02-08
-  //   /solve/number/973
+  // Query-param deep link support:
+  //   ?mode=solve|drag|click
+  //   ?puzzle={number}
+  //   ?date=YYYY-MM-DD
+  // puzzle takes precedence over date when both provided
   useEffect(() => {
-    const applyRoute = () => {
-      const route = parseSolveRoute(window.location.pathname);
-      if (route) {
-        setSolveRouteDate(route.date);
-        setActive("solve");
-      } else {
-        setSolveRouteDate(null);
+    const applyQuery = () => {
+      const { mode, date } = parseQueryParams(window.location.search);
+
+      // Date/puzzle implies solve mode unless an explicit mode is provided
+      if (date) {
+        setQueryPrintDate(date);
+        setActive(mode ?? "solve");
+        return;
       }
+
+      setQueryPrintDate(null);
+
+      // If only mode provided, honor it; otherwise keep current/cookie-driven mode
+      if (mode) setActive(mode);
     };
 
-    applyRoute();
-    window.addEventListener("popstate", applyRoute);
-    return () => window.removeEventListener("popstate", applyRoute);
+    applyQuery();
+    window.addEventListener("popstate", applyQuery);
+    return () => window.removeEventListener("popstate", applyQuery);
   }, []);
 
   useEffect(() => {
@@ -155,21 +167,21 @@ export default function App() {
           <div
             className={active === "drag" ? "nytTabPanel active" : "nytTabPanel"}
           >
-            <DragStyle />
+            <DragStyle initialPrintDate={queryPrintDate} />
           </div>
           <div
             className={
               active === "click" ? "nytTabPanel active" : "nytTabPanel"
             }
           >
-            <ClickStyle />
+            <ClickStyle initialPrintDate={queryPrintDate} />
           </div>
           <div
             className={
               active === "solve" ? "nytTabPanel active" : "nytTabPanel"
             }
           >
-            <Solve initialPrintDate={solveRouteDate} />
+            <Solve initialPrintDate={queryPrintDate} />
           </div>
         </div>
       </div>
