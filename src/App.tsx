@@ -58,6 +58,44 @@ function parseQueryParams(search: string): {
   return { mode, date };
 }
 
+function getEffectiveSearch(): string {
+  const raw =
+    typeof window !== "undefined" ? (window.location.search ?? "") : "";
+  if (!raw) return "";
+
+  // Discord (and some apps) may wrap the destination URL like:
+  //   https://discord.com/redirect?url=https%3A%2F%2Fexample.com%2F%3Fmode%3Dsolve%26puzzle%3D973
+  // In that case, the real query params live inside the encoded `url=` value.
+  try {
+    const outer = new URLSearchParams(raw);
+    const wrapped =
+      outer.get("url") ||
+      outer.get("u") ||
+      outer.get("target") ||
+      outer.get("link");
+    if (wrapped) {
+      const decoded = decodeURIComponent(wrapped);
+      const innerUrl = new URL(decoded, window.location.origin);
+      return innerUrl.search;
+    }
+  } catch {
+    // ignore
+  }
+
+  // In rare cases, the entire query string arrives percent-encoded.
+  // Example: ?mode%3Dsolve%26puzzle%3D973
+  if ((raw.includes("%3D") || raw.includes("%26")) && !raw.includes("=")) {
+    try {
+      const decoded = decodeURIComponent(raw);
+      return decoded.startsWith("?") ? decoded : `?${decoded}`;
+    } catch {
+      // ignore
+    }
+  }
+
+  return raw;
+}
+
 export default function App() {
   const tabs = useMemo(
     () =>
@@ -92,7 +130,7 @@ export default function App() {
   // puzzle takes precedence over date when both provided
   useEffect(() => {
     const applyQuery = () => {
-      const { mode, date } = parseQueryParams(window.location.search);
+      const { mode, date } = parseQueryParams(getEffectiveSearch());
 
       // Date/puzzle implies solve mode unless an explicit mode is provided
       if (date) {
@@ -109,7 +147,21 @@ export default function App() {
 
     applyQuery();
     window.addEventListener("popstate", applyQuery);
-    return () => window.removeEventListener("popstate", applyQuery);
+
+    // Some in-app browsers/webviews update the URL after the first render.
+    // Re-apply on focus/visibility changes so deep links from Discord are reliable.
+    const onFocus = () => applyQuery();
+    const onVis = () => {
+      if (document.visibilityState === "visible") applyQuery();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVis);
+
+    return () => {
+      window.removeEventListener("popstate", applyQuery);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVis);
+    };
   }, []);
 
   useEffect(() => {
