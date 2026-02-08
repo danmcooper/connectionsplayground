@@ -21,6 +21,39 @@ function setCookie(name: string, value: string) {
   document.cookie = `${name}=${encodeURIComponent(value)}; Max-Age=31536000; Path=/; SameSite=Lax`;
 }
 
+function puzzleNumberToPrintDate(puzzleNumber: number): string | null {
+  if (!Number.isFinite(puzzleNumber) || puzzleNumber < 1) return null;
+  const epochUtc = Date.UTC(2023, 5, 12); // June 12, 2023 (Puzzle #1)
+  const targetUtc = epochUtc + (Math.floor(puzzleNumber) - 1) * 86_400_000;
+  const dt = new Date(targetUtc);
+  const y = dt.getUTCFullYear();
+  const m = String(dt.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(dt.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function parseSolveRoute(pathname: string): { date: string } | null {
+  // Supported:
+  //  - /solve/date/2026-02-08
+  //  - /solve/number/973
+  // Also supports being hosted under a base path (e.g., /connectionsplayground/solve/date/...)
+  const idx = pathname.indexOf("/solve/");
+  if (idx === -1) return null;
+
+  const clean = pathname.slice(idx).replace(/\/+$/, "");
+  const byDate = clean.match(/^\/solve\/date\/(\d{4}-\d{2}-\d{2})$/);
+  if (byDate) return { date: byDate[1] };
+
+  const byNumber = clean.match(/^\/solve\/number\/(\d+)$/);
+  if (byNumber) {
+    const n = Number(byNumber[1]);
+    const date = puzzleNumberToPrintDate(n);
+    return date ? { date } : null;
+  }
+
+  return null;
+}
+
 export default function App() {
   const tabs = useMemo(
     () =>
@@ -44,7 +77,28 @@ export default function App() {
       : "drag";
   });
 
+  const [solveRouteDate, setSolveRouteDate] = useState<string | null>(null);
+
   const [showHelp, setShowHelp] = useState(false);
+
+  // Deep-link support:
+  //   /solve/date/2026-02-08
+  //   /solve/number/973
+  useEffect(() => {
+    const applyRoute = () => {
+      const route = parseSolveRoute(window.location.pathname);
+      if (route) {
+        setSolveRouteDate(route.date);
+        setActive("solve");
+      } else {
+        setSolveRouteDate(null);
+      }
+    };
+
+    applyRoute();
+    window.addEventListener("popstate", applyRoute);
+    return () => window.removeEventListener("popstate", applyRoute);
+  }, []);
 
   useEffect(() => {
     try {
@@ -115,7 +169,7 @@ export default function App() {
               active === "solve" ? "nytTabPanel active" : "nytTabPanel"
             }
           >
-            <Solve />
+            <Solve initialPrintDate={solveRouteDate} />
           </div>
         </div>
       </div>

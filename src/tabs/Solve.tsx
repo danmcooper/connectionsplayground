@@ -673,7 +673,11 @@ function DatePicker({
   );
 }
 
-export default function Solve() {
+export default function Solve({
+  initialPrintDate,
+}: {
+  initialPrintDate?: string | null;
+}) {
   const [tiles, setTiles] = useState<Tile[]>(fallbackTiles);
   const [baseTiles, setBaseTiles] = useState<Tile[]>(fallbackTiles);
 
@@ -863,13 +867,23 @@ export default function Solve() {
     }
   }
 
-  // Default on load/reload: current local day
+  // Default on load/reload: current local day — unless App deep-linked a specific date/number
+  const initialAppliedRef = useRef<string | null>(null);
   useEffect(() => {
-    const localDate = fmtLocalYYYYMMDD(new Date());
-    setPickedDate(localDate);
-    loadPuzzleByDate(localDate);
+    const fromRoute =
+      typeof initialPrintDate === "string" &&
+      /^\d{4}-\d{2}-\d{2}$/.test(initialPrintDate)
+        ? initialPrintDate
+        : null;
+
+    const desired = fromRoute ?? fmtLocalYYYYMMDD(new Date());
+    if (initialAppliedRef.current === desired) return;
+    initialAppliedRef.current = desired;
+
+    setPickedDate(desired);
+    loadPuzzleByDate(desired);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [initialPrintDate]);
 
   // Persist Solve progress whenever it changes (keyed by the puzzle print_date)
   const storagePrintDate = nytMeta?.print_date ?? null;
