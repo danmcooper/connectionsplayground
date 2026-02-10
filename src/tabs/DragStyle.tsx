@@ -395,12 +395,10 @@ function DatePicker({
   value,
   availableDatesAsc,
   onChange,
-  onReset,
 }: {
   value: string;
   availableDatesAsc: string[];
   onChange: (next: string) => void;
-  onReset: () => void;
 }) {
   const availableSet = useMemo(
     () => new Set(availableDatesAsc),
@@ -539,8 +537,12 @@ function DatePicker({
         ›
       </button>
 
-      <button className="nytTodayBtn" type="button" onClick={onReset}>
-        Reset
+      <button
+        className="nytTodayBtn"
+        type="button"
+        onClick={() => onChange(fmtLocalYYYYMMDD(new Date()))}
+      >
+        Today
       </button>
 
       {open && (
@@ -980,6 +982,14 @@ export default function DragStyle({
     // Clear positions so the initializer lays out a fresh grid
     setTilePos({});
   };
+  const isDirty = useMemo(() => {
+    if (groups.length > 0) return true;
+    if (selected.size > 0) return true;
+    if (Object.keys(manualTileColor).length > 0) return true;
+    if (Object.keys(tilePos).length > 0) return true;
+    return false;
+  }, [groups, selected, manualTileColor, tilePos]);
+
   return (
     <>
       <div className="nytHeadline">
@@ -992,16 +1002,34 @@ export default function DragStyle({
           {!loading && error && <div className="nytError">{error}</div>}
           {!loading && !error && (
             <div className="nytMeta">
-              {nytMeta ? (
-                <>
-                  {puzzleNumber !== null ? (
-                    <>Puzzle #{puzzleNumber} • </>
-                  ) : null}
-                  {nytMeta.print_date}
-                </>
-              ) : (
-                <>Requested {requestedDate}</>
-              )}
+              <div className="nytMetaRow">
+                {nytMeta ? (
+                  <>
+                    {puzzleNumber !== null ? (
+                      <div className="nytMetaItem">Puzzle #{puzzleNumber}</div>
+                    ) : null}
+                    {puzzleNumber !== null ? (
+                      <div className="nytMetaDot">•</div>
+                    ) : null}
+                    <div className="nytMetaItem">{nytMeta.print_date}</div>
+                    <div className="nytMetaDot">•</div>
+                    <button
+                      className="nytResetText"
+                      type="button"
+                      onClick={resetAll}
+                      disabled={!isDirty}
+                      aria-disabled={!isDirty}
+                      title={isDirty ? "Reset" : "Nothing to reset"}
+                    >
+                      Reset
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div className="nytMetaItem">Requested {requestedDate}</div>
+                  </>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -1013,7 +1041,6 @@ export default function DragStyle({
           value={pickedDate}
           availableDatesAsc={availableDatesAsc}
           onChange={onPickDate}
-          onReset={resetAll}
         />
       </div>
 
