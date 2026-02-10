@@ -27,8 +27,11 @@ const tinyTextThreshold = 9; // characters
 
 function getTileTextSize(t: Tile): string {
   const text = getTileText(t);
-  if (text.length > smallTextThreshold) {
-    if (text.length > tinyTextThreshold) {
+  const maxStringLength = text
+    .split(" ")
+    .reduce((max, s) => Math.max(max, s.length), 0);
+  if (maxStringLength > smallTextThreshold) {
+    if (maxStringLength > tinyTextThreshold) {
       return "tinyText";
     }
     return "smallText";
