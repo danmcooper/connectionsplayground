@@ -23,7 +23,7 @@ function getTileText(t: Tile): string {
 }
 
 const smallTextThreshold = 7; // characters
-const tinyTextThreshold = 10; // characters
+const tinyTextThreshold = 9; // characters
 
 function getTileTextSize(t: Tile): string {
   const text = getTileText(t);
