@@ -21,6 +21,20 @@ function getTileText(t: Tile): string {
   return isImageTile(t) ? t.alt : t.text;
 }
 
+const smallTextThreshold = 7; // characters
+const tinyTextThreshold = 10; // characters
+
+function getTileTextSize(t: Tile): string {
+  const text = getTileText(t);
+  if (text.length > smallTextThreshold) {
+    if (text.length > tinyTextThreshold) {
+      return "tinyText";
+    }
+    return "smallText";
+  }
+  return "";
+}
+
 function TileFace({ tile }: { tile: Tile }) {
   if (isImageTile(tile)) {
     return (
@@ -60,8 +74,6 @@ const fallbackTiles: Tile[] = [
   { id: "t15", text: "BUSHEL", kind: "text" },
   { id: "t16", text: "VALET", kind: "text" },
 ];
-
-const smallTextThreshold = 7; // characters
 
 type NytConnectionsResponse = {
   status: "OK" | string;
@@ -927,11 +939,9 @@ export default function ClickStyle({
                     onClick={() => onClickGroupedTile(id)}
                     title="Click to uncategorize (keeps other 3 selected)"
                     type="button"
-                    className={`nytTile locked ${g.color} ${
-                      getTileText(t!).length > smallTextThreshold
-                        ? "smallText"
-                        : ""
-                    }`}
+                    className={`nytTile locked ${g.color} ${getTileTextSize(
+                      t!,
+                    )}`}
                   >
                     <TileFace tile={t!} />
                   </button>
@@ -953,9 +963,9 @@ export default function ClickStyle({
                 onClick={() => toggleSelect(t.id)}
                 aria-pressed={isSelected}
                 type="button"
-                className={`nytTile ${isImageTile(t) ? "imgTile" : ""} ${isSelected ? "selected" : ""} ${
-                  getTileText(t).length > smallTextThreshold ? "smallText" : ""
-                }`}
+                className={`nytTile ${isImageTile(t) ? "imgTile" : ""} ${isSelected ? "selected" : ""} ${getTileTextSize(
+                  t,
+                )}`}
               >
                 <TileFace tile={t} />
               </button>

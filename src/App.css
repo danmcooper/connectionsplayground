@@ -482,6 +482,21 @@ body {
   letter-spacing: 0.03em;
 }
 
+@media (min-width: 500px) {
+  .nytTile.tinyText {
+    font-size: 10.5px;
+    letter-spacing: 0.03em;
+  }
+}
+
+@media (max-width: 490px) {
+  /* Smaller font for long words (smallTextThreshold+ chars) */
+  .nytTile.tinyText {
+    font-size: 7.5px;
+    letter-spacing: 0.03em;
+  }
+}
+
 /* selected */
 .nytTile.selected {
   background: var(--connections-darkest-beige);

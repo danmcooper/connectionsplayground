@@ -22,6 +22,20 @@ function getTileText(t: Tile): string {
   return isImageTile(t) ? t.alt : t.text;
 }
 
+const smallTextThreshold = 7; // characters
+const tinyTextThreshold = 10; // characters
+
+function getTileTextSize(t: Tile): string {
+  const text = getTileText(t);
+  if (text.length > smallTextThreshold) {
+    if (text.length > tinyTextThreshold) {
+      return "tinyText";
+    }
+    return "smallText";
+  }
+  return "";
+}
+
 function TileFace({ tile }: { tile: Tile }) {
   if (isImageTile(tile)) {
     return (
@@ -61,8 +75,6 @@ const fallbackTiles: Tile[] = [
   { id: "t15", text: "BUSHEL", kind: "text" },
   { id: "t16", text: "VALET", kind: "text" },
 ];
-
-const smallTextThreshold = 7; // characters
 
 type NytConnectionsResponse = {
   status: "OK" | string;
@@ -1111,9 +1123,9 @@ export default function DragStyle({
             return (
               <div
                 key={t.id}
-                className={`nytTile ${isImageTile(t) ? "imgTile" : ""}  nytFreeTile ${manualTileColor[t.id] ?? ""} ${
-                  getTileText(t).length > smallTextThreshold ? "smallText" : ""
-                } ${selected.has(t.id) ? "selected" : ""}`}
+                className={`nytTile ${isImageTile(t) ? "imgTile" : ""}  nytFreeTile ${manualTileColor[t.id] ?? ""} ${getTileTextSize(
+                  t,
+                )} ${selected.has(t.id) ? "selected" : ""}`}
                 onPointerDown={onTilePointerDown(t.id)}
                 onClick={() => {
                   if (isColorMode) toggleSelectTile(t.id);
