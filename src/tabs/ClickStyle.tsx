@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { getJsonCookie, setJsonCookie } from "../utils/persistence";
 type ColorKey = "yellow" | "green" | "blue" | "purple";
 
 const COLORS: { key: ColorKey; label: string }[] = [
@@ -231,15 +232,24 @@ function pickBestDateFromIndex(
 /* ---------------- localStorage: save only categorized groups + color ---------------- */
 
 function storageKeyForPrintDate(printDate: string) {
-  return `connections-playground::${printDate}`;
+  return `connections-playground::click::${printDate}`;
 }
 
+function cookieKeyForPrintDate(printDate: string) {
+  return `cp_click_groups_${printDate}`;
+}
 function loadSavedGroups(
   printDate: string,
   validTileIds: Set<string>,
 ): Group[] {
   try {
-    const raw = localStorage.getItem(storageKeyForPrintDate(printDate));
+    const cookieParsed = getJsonCookie<unknown>(
+      cookieKeyForPrintDate(printDate),
+      null,
+    );
+    const raw = cookieParsed
+      ? JSON.stringify(cookieParsed)
+      : localStorage.getItem(storageKeyForPrintDate(printDate));
     if (!raw) return [];
 
     const parsed = JSON.parse(raw) as {
@@ -271,9 +281,11 @@ function loadSavedGroups(
 
 function saveGroups(printDate: string, groups: Group[]) {
   try {
+    const payload = { groups };
+    setJsonCookie(cookieKeyForPrintDate(printDate), payload);
     localStorage.setItem(
       storageKeyForPrintDate(printDate),
-      JSON.stringify({ groups }),
+      JSON.stringify(payload),
     );
   } catch {
     // ignore

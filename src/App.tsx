@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { getCookie, setCookie } from "./utils/persistence";
+import { APP_VERSION } from "./version";
 import "./App.css";
 
 import DragStyle from "./tabs/DragStyle";
@@ -6,20 +8,6 @@ import ClickStyle from "./tabs/ClickStyle";
 import Solve from "./tabs/Solve";
 
 type TabKey = "drag" | "click" | "solve";
-
-function getCookie(name: string) {
-  const match = document.cookie.match(
-    new RegExp(
-      "(^|; )" + name.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&") + "=([^;]*)",
-    ),
-  );
-  return match ? decodeURIComponent(match[2]) : null;
-}
-
-function setCookie(name: string, value: string) {
-  // 1 year
-  document.cookie = `${name}=${encodeURIComponent(value)}; Max-Age=31536000; Path=/; SameSite=Lax`;
-}
 
 function puzzleNumberToPrintDate(puzzleNumber: number): string | null {
   if (!Number.isFinite(puzzleNumber) || puzzleNumber < 1) return null;
@@ -257,7 +245,7 @@ export default function App() {
             aria-modal="true"
           >
             <div className="modalTitle">
-              Welciome to the Connections Playground!
+              Welcome to the Connections Playground!
             </div>
 
             <div className="modalBody">
@@ -283,6 +271,11 @@ export default function App() {
                 <strong>Solve!</strong>: Similar to an actual NYT‑style solve
                 experience, but with date selection so you can play older
                 puzzles.
+              </p>
+
+              <p className="modalFinePrint">
+                © {new Date().getFullYear()} Connections Playground. All rights
+                reserved. Version {APP_VERSION}.
               </p>
             </div>
 

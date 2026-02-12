@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { getJsonCookie, setJsonCookie } from "../utils/persistence";
 import type { PointerEvent as ReactPointerEvent } from "react";
 type ColorKey = "yellow" | "green" | "blue" | "purple";
 
@@ -232,11 +233,14 @@ function pickBestDateFromIndex(
 /* ---------------- localStorage: save only categorized groups + color ---------------- */
 
 function storageKeyForPrintDate(printDate: string) {
-  return `connections-playground::${printDate}`;
+  return `connections-playground::drag::${printDate}`;
 }
-
 function tilePosKeyForPrintDate(printDate: string) {
   return `connections-playground::${printDate}::dragPos`;
+}
+
+function cookieKeyForPrintDate(printDate: string) {
+  return `cp_drag_state_${printDate}`;
 }
 
 function loadSavedTilePos(
@@ -281,7 +285,13 @@ function loadSavedDragState(
   manualTileColor: Record<string, ColorKey | undefined>;
 } {
   try {
-    const raw = localStorage.getItem(storageKeyForPrintDate(printDate));
+    const cookieParsed = getJsonCookie<unknown>(
+      cookieKeyForPrintDate(printDate),
+      null,
+    );
+    const raw = cookieParsed
+      ? JSON.stringify(cookieParsed)
+      : localStorage.getItem(storageKeyForPrintDate(printDate));
     if (!raw) return { groups: [], manualTileColor: {} };
 
     const parsed = JSON.parse(raw) as {
@@ -339,9 +349,15 @@ function saveDragState(
       cleanedManual[id] = c;
     }
 
+    const payload = { groups, manualTileColor: cleanedManual };
+
+    // Cookie is the source of truth for color persistence (small payload).
+    setJsonCookie(cookieKeyForPrintDate(printDate), payload);
+
+    // Keep localStorage as a secondary store for backwards compatibility.
     localStorage.setItem(
       storageKeyForPrintDate(printDate),
-      JSON.stringify({ groups, manualTileColor: cleanedManual }),
+      JSON.stringify(payload),
     );
   } catch {
     // ignore
