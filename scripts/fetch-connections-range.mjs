@@ -120,6 +120,13 @@ function listAvailableDatesFromDisk() {
   return dates.sort();
 }
 
+const refetchCloseToCurrentInCaseChanged = (offset) => {
+  if (offset >= -1 && offset <= 1) {
+    return true;
+  }
+  return false;
+};
+
 async function main() {
   fs.mkdirSync(OUT_DIR, { recursive: true });
 
@@ -144,7 +151,7 @@ async function main() {
 
     // ✅ Skip network if file already exists
     const existing = resultFromExistingFile(printDate);
-    if (existing?.ok) {
+    if (existing?.ok && !refetchCloseToCurrentInCaseChanged(off)) {
       index.available[printDate] = existing;
       console.log(`SKIP ${printDate} (exists)`);
       continue;
