@@ -11,9 +11,7 @@
     "preview": "vite preview",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist",
-    "fetch:nyt": "node scripts/fetch-connections-range.mjs",
-    "prepare": "node scripts/setup-hooks.mjs",
-    "version:bump-patch": "node scripts/bump-patch.mjs --stage"
+    "fetch:nyt": "node scripts/fetch-connections-range.mjs"
   },
   "dependencies": {
     "react": "^19.2.0",
