@@ -489,7 +489,15 @@ body {
   }
 }
 
-@media (max-width: 499px) {
+@media (min-width: 400px) and (max-width: 499px) {
+  /* Smaller font for long words (smallTextThreshold+ chars) */
+  .nytTile.tinyText {
+    font-size: 8.5px;
+    letter-spacing: 0.03em;
+  }
+}
+
+@media (max-width: 399px) {
   /* Smaller font for long words (smallTextThreshold+ chars) */
   .nytTile.tinyText {
     font-size: 7.5px;
