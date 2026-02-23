@@ -499,11 +499,30 @@ body {
   }
 }
 
-@media (max-width: 399px) {
+@media (min-width: 350px) and (max-width: 399px) {
   /* Smaller font for long words (smallTextThreshold+ chars) */
   .nytTile.tinyText {
     font-size: 7.5px;
     letter-spacing: 0.03em;
+  }
+  .nytTile.smallText {
+    font-size: 9.5px;
+    letter-spacing: 0.03em;
+  }
+}
+
+@media (max-width: 349px) {
+  /* Smaller font for long words (smallTextThreshold+ chars) */
+  .nytTile.tinyText {
+    font-size: 7.5px;
+    letter-spacing: 0.03em;
+  }
+  .nytTile.smallText {
+    font-size: 9.5px;
+    letter-spacing: 0.03em;
+  }
+  .nytTile {
+    font-size: 13px;
   }
 }
 
