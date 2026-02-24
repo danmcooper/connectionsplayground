@@ -841,7 +841,7 @@ body {
   display: block;
 }
 
-/* ---------- Drag Style: Drag/Select sub-tabs ---------- */
+/* ---------- Drag Mode: Drag/Select sub-tabs ---------- */
 .nytSubTabsRow {
   margin-top: 8px;
   margin-bottom: 10px;
@@ -928,7 +928,7 @@ body {
   justify-content: center;
 }
 
-/* Drag Style: Color toggle emphasis */
+/* Drag Mode: Color toggle emphasis */
 .nytColorToggle.active {
   background: #111;
   color: #fff;

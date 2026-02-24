@@ -892,7 +892,7 @@ export default function DragStyle({
       setManualTileColor(savedState.manualTileColor);
       setGroups(saved);
 
-      // restore saved drag positions (Drag Style only)
+      // restore saved drag positions (Drag Mode only)
       const savedPos = loadSavedTilePos(data.print_date, tileIdSet);
       setTilePos(savedPos);
 

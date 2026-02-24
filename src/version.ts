@@ -1,2 +1,2 @@
 // This should match package.json "version".
-export const APP_VERSION = "1.1.3";
+export const APP_VERSION = "1.1.4";

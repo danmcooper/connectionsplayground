@@ -88,8 +88,8 @@ export default function App() {
   const tabs = useMemo(
     () =>
       [
-        { key: "drag" as const, label: "Drag Style" },
-        { key: "click" as const, label: "Click Style" },
+        { key: "drag" as const, label: "Drag Mode" },
+        { key: "click" as const, label: "Click Mode" },
         { key: "solve" as const, label: "Solve!" },
       ] satisfies Array<{ key: TabKey; label: string }>,
     [],
@@ -257,13 +257,13 @@ export default function App() {
                 2023.
               </p>
               <p>
-                <strong>Drag Style</strong>: Move tiles freely like physical
+                <strong>Drag Mode</strong>: Move tiles freely like physical
                 tiles. Use the “Color” button to click tiles and paint them
                 yellow/green/blue/purple for visual grouping.
               </p>
 
               <p>
-                <strong>Click Style</strong>: Select 4 tiles then group them by
+                <strong>Click Mode</strong>: Select 4 tiles then group them by
                 color. Keep selecting until all tiles are grouped.
               </p>
 
