@@ -816,6 +816,10 @@ export default function DragStyle({
   const onTilePointerDown = (tileId: string) => (e: ReactPointerEvent) => {
     if (isColorMode) return;
 
+    // Prevent the tile from receiving persistent focus styles on tap/click.
+    // (Keyboard focus still works via tabIndex + :focus-visible.)
+    e.preventDefault();
+
     const el = boardRef.current;
     if (!el) return;
 

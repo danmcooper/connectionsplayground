@@ -1339,6 +1339,8 @@ export default function Solve({
             return (
               <button
                 key={t.id}
+                onMouseDown={(e) => e.preventDefault()}
+                onPointerDown={(e) => e.preventDefault()}
                 onClick={() => {
                   if (isSubmitting) return;
                   toggleSelect(t.id);

@@ -951,6 +951,8 @@ export default function ClickStyle({
                 return (
                   <button
                     key={id}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onPointerDown={(e) => e.preventDefault()}
                     onClick={() => onClickGroupedTile(id)}
                     title="Click to uncategorize (keeps other 3 selected)"
                     type="button"
@@ -975,6 +977,8 @@ export default function ClickStyle({
             return (
               <button
                 key={t.id}
+                onMouseDown={(e) => e.preventDefault()}
+                onPointerDown={(e) => e.preventDefault()}
                 onClick={() => toggleSelect(t.id)}
                 aria-pressed={isSelected}
                 type="button"
