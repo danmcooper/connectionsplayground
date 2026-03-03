@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getJsonCookie, setJsonCookie } from "../utils/persistence";
 import type { PointerEvent as ReactPointerEvent } from "react";
+import { fetchJsonCached } from "../utils/fetchJsonCached";
 type ColorKey = "yellow" | "green" | "blue" | "purple";
 
 const SELECT_COLOR_OPTIONS: Array<{ key: ColorKey; label: string }> = [
@@ -185,13 +186,6 @@ function nytToTiles(data: NytConnectionsResponse): Tile[] {
 
       throw new Error("Unsupported NYT card type");
     });
-}
-
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok)
-    throw new Error(`Fetch failed: ${res.status} ${res.statusText} (${url})`);
-  return (await res.json()) as T;
 }
 
 function pickBestDateFromIndex(
@@ -653,7 +647,7 @@ export default function DragStyle({
 }: {
   initialPrintDate?: string | null;
 }) {
-  const [tiles, setTiles] = useState<Tile[]>(fallbackTiles);
+    const [tiles, setTiles] = useState<Tile[]>(fallbackTiles);
   const [groups, setGroups] = useState<Group[]>([]);
 
   // puzzle load status
@@ -860,7 +854,7 @@ export default function DragStyle({
   useEffect(() => {
     (async () => {
       try {
-        const data = await fetchJson<AvailableDatesFile>(
+        const data = await fetchJsonCached<AvailableDatesFile>(
           nytUrl("nyt/available-dates.json"),
         );
         const dates = Array.isArray(data.dates)
@@ -908,7 +902,7 @@ export default function DragStyle({
 
     // Try exact date file FIRST (so old dates load properly)
     try {
-      const data = await fetchJson<NytConnectionsResponse>(
+      const data = await fetchJsonCached<NytConnectionsResponse>(
         nytUrl(`nyt/${dateStr}.json`),
       );
       if (data.status !== "OK")
@@ -921,11 +915,11 @@ export default function DragStyle({
 
     // Then try index.json best match (for near-today window, future, etc.)
     try {
-      const index = await fetchJson<NytIndex>(nytUrl("nyt/index.json"));
+      const index = await fetchJsonCached<NytIndex>(nytUrl("nyt/index.json"));
       const bestDate = pickBestDateFromIndex(index, dateStr);
 
       if (bestDate) {
-        const data = await fetchJson<NytConnectionsResponse>(
+        const data = await fetchJsonCached<NytConnectionsResponse>(
           nytUrl(`nyt/${bestDate}.json`),
         );
         if (data.status !== "OK")
@@ -939,7 +933,7 @@ export default function DragStyle({
 
     // Finally latest.json
     try {
-      const data = await fetchJson<NytConnectionsResponse>(
+      const data = await fetchJsonCached<NytConnectionsResponse>(
         nytUrl("nyt/latest.json"),
       );
       if (data.status !== "OK")
