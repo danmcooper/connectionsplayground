@@ -70,20 +70,33 @@ function hasGitConfig(key) {
   }
 }
 
+function shellSingleQuote(value) {
+  return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
 function ensureGitIdentityForCi() {
   if (process.env.GITHUB_ACTIONS !== "true") {
     return;
   }
 
   if (!hasGitConfig("user.name")) {
-    execSync('git config user.name "github-actions[bot]"', {
+    execSync('git config --global user.name "github-actions[bot]"', {
       stdio: "inherit",
     });
   }
 
   if (!hasGitConfig("user.email")) {
     execSync(
-      'git config user.email "github-actions[bot]@users.noreply.github.com"',
+      'git config --global user.email "github-actions[bot]@users.noreply.github.com"',
+      { stdio: "inherit" },
+    );
+  }
+
+  const token = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN;
+  if (token) {
+    const authedGithubBase = `https://x-access-token:${token}@github.com/`;
+    execSync(
+      `git config --global url.${shellSingleQuote(authedGithubBase)}.insteadOf ${shellSingleQuote("https://github.com/")}`,
       { stdio: "inherit" },
     );
   }
