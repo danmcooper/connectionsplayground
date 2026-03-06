@@ -22,8 +22,11 @@ jobs:
 
       - run: npm ci
 
-      # 1) fetch public/nyt/*.json (your script)
+      # 1) fetch public/nyt/*.json (script may deploy when data changed)
       - run: npm run fetch:nyt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # 2) commit fetched json back to master (so repo keeps the archive)
       - name: Commit NYT files (if changed)
