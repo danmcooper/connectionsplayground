@@ -61,6 +61,34 @@ function writeJsonIfChanged(filePath, data) {
   return writeTextIfChanged(filePath, JSON.stringify(data));
 }
 
+function hasGitConfig(key) {
+  try {
+    execSync(`git config --get ${key}`, { stdio: "pipe" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function ensureGitIdentityForCi() {
+  if (process.env.GITHUB_ACTIONS !== "true") {
+    return;
+  }
+
+  if (!hasGitConfig("user.name")) {
+    execSync('git config user.name "github-actions[bot]"', {
+      stdio: "inherit",
+    });
+  }
+
+  if (!hasGitConfig("user.email")) {
+    execSync(
+      'git config user.email "github-actions[bot]@users.noreply.github.com"',
+      { stdio: "inherit" },
+    );
+  }
+}
+
 async function fetchOne(printDate) {
   const url = `https://www.nytimes.com/svc/connections/v2/${printDate}.json`;
 
@@ -241,6 +269,7 @@ async function main() {
   console.log(filesChanged ? "Changes detected." : "No changes detected.");
 
   if (filesChanged) {
+    ensureGitIdentityForCi();
     console.log(`Running redeploy command: ${redeployCommand}`);
     execSync(redeployCommand, { stdio: "inherit" });
   } else {
