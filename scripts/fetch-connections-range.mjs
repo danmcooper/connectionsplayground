@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { execSync } from "node:child_process";
 
 const TZ = "America/New_York";
 const OUT_DIR = path.join(process.cwd(), "public", "nyt");
@@ -38,6 +39,28 @@ function safeReadJson(filePath) {
   }
 }
 
+function readFileIfExists(filePath) {
+  try {
+    return fs.readFileSync(filePath, "utf-8");
+  } catch {
+    return null;
+  }
+}
+
+function writeTextIfChanged(filePath, text) {
+  const existing = readFileIfExists(filePath);
+  if (existing === text) {
+    return false;
+  }
+
+  fs.writeFileSync(filePath, text);
+  return true;
+}
+
+function writeJsonIfChanged(filePath, data) {
+  return writeTextIfChanged(filePath, JSON.stringify(data));
+}
+
 async function fetchOne(printDate) {
   const url = `https://www.nytimes.com/svc/connections/v2/${printDate}.json`;
 
@@ -66,8 +89,8 @@ async function fetchOne(printDate) {
   }
 
   const filePath = path.join(OUT_DIR, `${printDate}.json`);
-  fs.writeFileSync(filePath, JSON.stringify(data));
-  return { ok: true, printDate, id: data.id, editor: data.editor };
+  const changed = writeJsonIfChanged(filePath, data);
+  return { ok: true, printDate, id: data.id, editor: data.editor, changed };
 }
 
 function resultFromExistingFile(printDate) {
@@ -128,7 +151,10 @@ const refetchCloseToCurrentInCaseChanged = (offset) => {
 };
 
 async function main() {
+  const redeployCommand = process.env.REDEPLOY_COMMAND ?? "npm run deploy";
+
   fs.mkdirSync(OUT_DIR, { recursive: true });
+  let filesChanged = false;
 
   // Determine “today” in NY time, then use that as the anchor for the range.
   const anchorNy = fmtYYYYMMDD(new Date(), TZ);
@@ -138,7 +164,6 @@ async function main() {
   const TO = 30; // ✅ up to 30 days ahead
 
   const index = {
-    generated_at: new Date().toISOString(),
     timezone: TZ,
     anchor_print_date: anchorNy,
     range: { from: FROM, to: TO },
@@ -160,7 +185,11 @@ async function main() {
     // If the file exists but is bad, you can choose to refetch.
     // We'll refetch in that case.
     const result = await fetchOne(printDate);
-    index.available[printDate] = result;
+    if (result.ok && result.changed) {
+      filesChanged = true;
+    }
+    const { changed: _changed, ...resultForIndex } = result;
+    index.available[printDate] = resultForIndex;
     console.log(
       result.ok
         ? `OK   ${printDate}`
@@ -169,15 +198,21 @@ async function main() {
   }
 
   // Write index.json
-  fs.writeFileSync(path.join(OUT_DIR, "index.json"), JSON.stringify(index));
+  if (writeJsonIfChanged(path.join(OUT_DIR, "index.json"), index)) {
+    filesChanged = true;
+  }
 
   // Write latest.json as anchor day if present (either disk or fetched)
   const anchorFile = path.join(OUT_DIR, `${anchorNy}.json`);
   if (fs.existsSync(anchorFile)) {
-    fs.writeFileSync(
-      path.join(OUT_DIR, "latest.json"),
-      fs.readFileSync(anchorFile),
-    );
+    if (
+      writeTextIfChanged(
+        path.join(OUT_DIR, "latest.json"),
+        fs.readFileSync(anchorFile, "utf-8"),
+      )
+    ) {
+      filesChanged = true;
+    }
   }
 
   console.log("Done. Anchor:", anchorNy, `Range: ${FROM}..${TO}`);
@@ -190,15 +225,27 @@ async function main() {
   const availableDates = listAvailableDatesFromDisk();
 
   const availableDatesJson = {
-    generated_at: new Date().toISOString(),
     timezone: TZ,
     dates: availableDates,
   };
 
-  fs.writeFileSync(
-    path.join(OUT_DIR, "available-dates.json"),
-    JSON.stringify(availableDatesJson),
-  );
+  if (
+    writeJsonIfChanged(
+      path.join(OUT_DIR, "available-dates.json"),
+      availableDatesJson,
+    )
+  ) {
+    filesChanged = true;
+  }
+
+  console.log(filesChanged ? "Changes detected." : "No changes detected.");
+
+  if (filesChanged) {
+    console.log(`Running redeploy command: ${redeployCommand}`);
+    execSync(redeployCommand, { stdio: "inherit" });
+  } else {
+    console.log("Skipping redeploy because no files changed.");
+  }
 }
 
 main().catch((err) => {
