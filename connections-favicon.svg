@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Connections favicon">
+  <rect width="64" height="64" rx="14" fill="#efefe6" />
+  <g transform="translate(8 8)">
+    <rect x="0" y="0" width="22" height="22" rx="5" fill="#f9df6d" />
+    <rect x="26" y="0" width="22" height="22" rx="5" fill="#a0c35a" />
+    <rect x="0" y="26" width="22" height="22" rx="5" fill="#b0c4ef" />
+    <rect x="26" y="26" width="22" height="22" rx="5" fill="#ba81c5" />
+  </g>
+</svg>
