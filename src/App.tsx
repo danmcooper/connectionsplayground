@@ -273,6 +273,18 @@ export default function App() {
                 puzzles.
               </p>
 
+              <p>
+                Questions or feedback? Reach me on Bluesky at{" "}
+                <a
+                  href="https://bsky.app/profile/connxnsplayground.bsky.social"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  @connxnsplayground.bsky.social
+                </a>
+                .
+              </p>
+
               <p className="modalFinePrint">
                 © {new Date().getFullYear()} Connections Playground. All rights
                 reserved. Version {APP_VERSION}.
