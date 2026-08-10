@@ -589,6 +589,7 @@ export default function ClickStyle({
     editor?: string;
   } | null>(null);
   const [requestedDate, setRequestedDate] = useState<string | null>(null);
+  const [snack, setSnack] = useState<string | null>(null);
 
   // keep the real solution tile ids by color for current loaded puzzle
   // available dates + picker state
@@ -821,6 +822,58 @@ export default function ClickStyle({
     ? connectionsPuzzleNumber(nytMeta.print_date)
     : null;
 
+  /* ---------------- share ---------------- */
+
+  const allColored = groups.length === 4;
+
+  // Tile words, keyed by id, in the puzzle's original grid order.
+  // Image tiles share their alt text; when the puzzle gives no alt text,
+  // fall back to the tile's grid position so they stay distinguishable.
+  const tileShareInfo = useMemo(() => {
+    const m = new Map<string, { label: string; order: number }>();
+    baseTiles.forEach((t, i) => {
+      const text = getTileText(t);
+      const label =
+        isImageTile(t) && text === "IMAGE" ? `IMAGE ${i + 1}` : text;
+      m.set(t.id, { label, order: i });
+    });
+    return m;
+  }, [baseTiles]);
+
+  const shareText = useMemo(() => {
+    if (!allColored) return "";
+
+    const lines = [...COLORS]
+      .reverse() // purple, blue, green, yellow
+      .map(({ key, label }) => {
+        const g = groups.find((gr) => gr.color === key);
+        if (!g) return null;
+        const words = g.tileIds
+          .map((id) => tileShareInfo.get(id))
+          .filter((t): t is { label: string; order: number } => Boolean(t))
+          .sort((a, b) => a.order - b.order)
+          .map((t) => t.label);
+        return `${label}: ${words.join(", ")}`;
+      })
+      .filter((l): l is string => l !== null);
+
+    const header = ["My Connections Guesses"];
+    if (puzzleNumber !== null) header.push(`Puzzle #${puzzleNumber}`);
+
+    return [...header, ...lines].join("\n");
+  }, [allColored, groups, tileShareInfo, puzzleNumber]);
+
+  const copyResults = async () => {
+    if (!shareText) return;
+    try {
+      await navigator.clipboard.writeText(shareText);
+      setSnack("Copied!");
+      window.setTimeout(() => setSnack(null), 2000);
+    } catch {
+      // ignore
+    }
+  };
+
   const onPickDate = (next: string) => {
     setPickedDate(next);
 
@@ -1003,7 +1056,23 @@ export default function ClickStyle({
         >
           Deselect All
         </button>
+
+        <button
+          className="pillBtn primary"
+          onClick={copyResults}
+          disabled={!allColored}
+          title={allColored ? "Share your guesses" : "Color all four groups first"}
+          type="button"
+        >
+          Share
+        </button>
       </section>
+
+      {snack && (
+        <div className="nytSnack" role="status">
+          {snack}
+        </div>
+      )}
     </>
   );
 }
