@@ -542,6 +542,13 @@ body {
   outline-offset: 2px;
 }
 
+/* Touch devices: the selection ring is a pointer/keyboard affordance only */
+@media (hover: none) {
+  .nytTile.selected {
+    outline: none;
+  }
+}
+
 /* Solved tiles: flat fill + darker borders */
 .nytTile.yellow,
 .nytTile.purple,
