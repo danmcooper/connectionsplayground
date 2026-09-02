@@ -46,8 +46,11 @@ button {
   cursor: pointer;
   transition: border-color 0.25s;
 }
-button:hover {
-  border-color: #646cff;
+/* Hover-capable pointers only: touch taps leave a sticky :hover state */
+@media (hover: hover) {
+  button:hover {
+    border-color: #646cff;
+  }
 }
 button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
