@@ -482,6 +482,11 @@ body {
     letter-spacing: 0.03em;
   }
 
+  .nytTile.microText {
+    font-size: 8px;
+    letter-spacing: 0;
+  }
+
   .nytTile.smallText {
     font-size: 11.5px;
     letter-spacing: 0.03em;
@@ -492,6 +497,10 @@ body {
   .nytTile.tinyText {
     font-size: 8.5px;
     letter-spacing: 0.03em;
+  }
+  .nytTile.microText {
+    font-size: 6.5px;
+    letter-spacing: 0;
   }
   .nytTile.smallText {
     font-size: 10.5px;
@@ -505,6 +514,10 @@ body {
     font-size: 7.5px;
     letter-spacing: 0.03em;
   }
+  .nytTile.microText {
+    font-size: 6px;
+    letter-spacing: 0;
+  }
   .nytTile.smallText {
     font-size: 9.5px;
     letter-spacing: 0.03em;
@@ -516,6 +529,10 @@ body {
   .nytTile.tinyText {
     font-size: 7.5px;
     letter-spacing: 0.03em;
+  }
+  .nytTile.microText {
+    font-size: 6px;
+    letter-spacing: 0;
   }
   .nytTile.smallText {
     font-size: 9.5px;

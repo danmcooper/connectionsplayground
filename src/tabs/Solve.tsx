@@ -17,6 +17,7 @@ function getTileText(t: Tile): string {
 
 const smallTextThreshold = 7; // characters
 const tinyTextThreshold = 9; // characters
+const microTextThreshold = 12; // characters
 
 function getTileTextSize(t: Tile): string {
   const text = getTileText(t);
@@ -24,6 +25,9 @@ function getTileTextSize(t: Tile): string {
     .split(" ")
     .reduce((max, s) => Math.max(max, s.length), 0);
   if (maxStringLength > smallTextThreshold) {
+    if (maxStringLength > microTextThreshold) {
+      return "microText";
+    }
     if (maxStringLength > tinyTextThreshold) {
       return "tinyText";
     }
