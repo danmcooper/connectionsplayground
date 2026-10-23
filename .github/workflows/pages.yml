@@ -18,7 +18,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 26
+          check-latest: true # always resolve the newest 26.x, not the runner's cached one
 
       - run: npm ci
 
