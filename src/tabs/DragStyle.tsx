@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getJsonCookie, setJsonCookie } from "../utils/persistence";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { fetchJsonCached } from "../utils/fetchJsonCached";
+import PuzzleLinkButton from "../components/PuzzleLinkButton";
 type ColorKey = "yellow" | "green" | "blue" | "purple";
 
 const SELECT_COLOR_OPTIONS: Array<{ key: ColorKey; label: string }> = [
@@ -648,8 +649,10 @@ function DatePicker({
 
 export default function DragStyle({
   initialPrintDate,
+  onPrintDateChange,
 }: {
   initialPrintDate?: string | null;
+  onPrintDateChange?: (printDate: string) => void;
 }) {
     const [tiles, setTiles] = useState<Tile[]>(fallbackTiles);
   const [groups, setGroups] = useState<Group[]>([]);
@@ -970,6 +973,11 @@ export default function DragStyle({
 
   // Persist groups whenever they change (keyed by the puzzle print_date)
   const storagePrintDate = nytMeta?.print_date ?? null;
+
+  // Tell App which puzzle is loaded so it can keep the URL shareable
+  useEffect(() => {
+    if (storagePrintDate) onPrintDateChange?.(storagePrintDate);
+  }, [storagePrintDate, onPrintDateChange]);
   useEffect(() => {
     if (!storagePrintDate) return;
     saveDragState(storagePrintDate, groups, manualTileColor);
@@ -1039,7 +1047,11 @@ export default function DragStyle({
                 {nytMeta ? (
                   <>
                     {puzzleNumber !== null ? (
-                      <div className="nytMetaItem">Puzzle #{puzzleNumber}</div>
+                      <PuzzleLinkButton
+                        mode="drag"
+                        printDate={nytMeta.print_date}
+                        puzzleNumber={puzzleNumber}
+                      />
                     ) : null}
                     {puzzleNumber !== null ? (
                       <div className="nytMetaDot">•</div>

@@ -1311,3 +1311,18 @@ body {
 .nytResetText:not(:disabled):hover {
   text-decoration: underline;
 }
+
+/* "Puzzle #N" doubles as a copy-link button */
+.nytPuzzleLink {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.nytPuzzleLink:hover {
+  text-decoration: underline;
+}

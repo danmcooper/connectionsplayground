@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchJsonCached } from "../utils/fetchJsonCached";
+import PuzzleLinkButton from "../components/PuzzleLinkButton";
 type ColorKey = "yellow" | "green" | "blue" | "purple";
 
 type Tile =
@@ -690,8 +691,10 @@ function DatePicker({
 
 export default function Solve({
   initialPrintDate,
+  onPrintDateChange,
 }: {
   initialPrintDate?: string | null;
+  onPrintDateChange?: (printDate: string) => void;
 }) {
     const [tiles, setTiles] = useState<Tile[]>(fallbackTiles);
   const [baseTiles, setBaseTiles] = useState<Tile[]>(fallbackTiles);
@@ -907,6 +910,11 @@ export default function Solve({
 
   // Persist Solve progress whenever it changes (keyed by the puzzle print_date)
   const storagePrintDate = nytMeta?.print_date ?? null;
+
+  // Tell App which puzzle is loaded so it can keep the URL shareable
+  useEffect(() => {
+    if (storagePrintDate) onPrintDateChange?.(storagePrintDate);
+  }, [storagePrintDate, onPrintDateChange]);
   useEffect(() => {
     if (!storagePrintDate) return;
     saveSolveState(storagePrintDate, {
@@ -1261,7 +1269,11 @@ export default function Solve({
                 {nytMeta ? (
                   <>
                     {puzzleNumber !== null ? (
-                      <div className="nytMetaItem">Puzzle #{puzzleNumber}</div>
+                      <PuzzleLinkButton
+                        mode="solve"
+                        printDate={nytMeta.print_date}
+                        puzzleNumber={puzzleNumber}
+                      />
                     ) : null}
                     {puzzleNumber !== null ? (
                       <div className="nytMetaDot">•</div>

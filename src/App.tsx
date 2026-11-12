@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getCookie, setCookie } from "./utils/persistence";
+import { puzzleSearch } from "./utils/shareLink";
 import { APP_VERSION } from "./version";
 import "./App.css";
 
@@ -121,6 +122,43 @@ export default function App() {
 
   const [showHelp, setShowHelp] = useState(false);
 
+  // The puzzle each tab currently has loaded (tabs keep independent dates).
+  const [loadedDates, setLoadedDates] = useState<
+    Record<TabKey, string | null>
+  >({ drag: null, click: null, solve: null });
+  const loadedDatesRef = useRef(loadedDates);
+  const activeRef = useRef(active);
+  useEffect(() => {
+    loadedDatesRef.current = loadedDates;
+    activeRef.current = active;
+  }, [loadedDates, active]);
+
+  const onPrintDateChange = useMemo(() => {
+    const make = (tab: TabKey) => (printDate: string) =>
+      setLoadedDates((prev) =>
+        prev[tab] === printDate ? prev : { ...prev, [tab]: printDate },
+      );
+    return { drag: make("drag"), click: make("click"), solve: make("solve") };
+  }, []);
+
+  // Keep the address bar pointing at the current mode + puzzle, so sharing the
+  // page is just copying the URL.
+  const activeDate = loadedDates[active];
+  useEffect(() => {
+    if (!activeDate) return;
+    const search = puzzleSearch(active, activeDate);
+    if (window.location.search === search) return;
+    try {
+      window.history.replaceState(
+        window.history.state,
+        "",
+        `${window.location.pathname}${search}${window.location.hash}`,
+      );
+    } catch {
+      // ignore (e.g. sandboxed iframes)
+    }
+  }, [active, activeDate]);
+
   // Query-param deep link support:
   //   ?mode=solve|drag|click
   //   ?puzzle={number}
@@ -132,12 +170,18 @@ export default function App() {
 
       // Date/puzzle implies solve mode unless an explicit mode is provided
       if (date) {
+        const target = mode ?? "solve";
+        // The URL normally just mirrors what's on screen; only act when it
+        // points somewhere else (so we don't reload a puzzle mid-play).
+        if (
+          target === activeRef.current &&
+          date === loadedDatesRef.current[target]
+        )
+          return;
         setQueryPrintDate(date);
-        setActive(mode ?? "solve");
+        setActive(target);
         return;
       }
-
-      setQueryPrintDate(null);
 
       // If only mode provided, honor it; otherwise keep current/cookie-driven mode
       if (mode) setActive(mode);
@@ -217,21 +261,30 @@ export default function App() {
           <div
             className={active === "drag" ? "nytTabPanel active" : "nytTabPanel"}
           >
-            <DragStyle initialPrintDate={queryPrintDate} />
+            <DragStyle
+              initialPrintDate={queryPrintDate}
+              onPrintDateChange={onPrintDateChange.drag}
+            />
           </div>
           <div
             className={
               active === "click" ? "nytTabPanel active" : "nytTabPanel"
             }
           >
-            <ClickStyle initialPrintDate={queryPrintDate} />
+            <ClickStyle
+              initialPrintDate={queryPrintDate}
+              onPrintDateChange={onPrintDateChange.click}
+            />
           </div>
           <div
             className={
               active === "solve" ? "nytTabPanel active" : "nytTabPanel"
             }
           >
-            <Solve initialPrintDate={queryPrintDate} />
+            <Solve
+              initialPrintDate={queryPrintDate}
+              onPrintDateChange={onPrintDateChange.solve}
+            />
           </div>
         </div>
       </div>
